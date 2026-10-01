@@ -1,0 +1,34 @@
+'use client';
+import {FormEvent,useState} from 'react';
+import {signIn} from 'next-auth/react';
+import {useRouter} from 'next/navigation';
+import Image from 'next/image';
+
+export default function AdminLogin(){
+ const [username,setUsername]=useState('');
+ const [password,setPassword]=useState('');
+ const [error,setError]=useState('');
+ const [busy,setBusy]=useState(false);
+ const router=useRouter();
+ async function submit(e:FormEvent){
+   e.preventDefault();
+   if(busy)return;
+   setBusy(true); setError('');
+   const r=await signIn('credentials',{username,password,redirect:false,callbackUrl:'/admin'});
+   if(r?.ok) router.replace('/admin');
+   else {setError('Invalid administrator username or password.');setBusy(false);}
+ }
+ return <main className="admin-login-scene min-h-screen px-4 py-10 sm:py-16">
+   <div className="admin-orb admin-orb-a"/><div className="admin-orb admin-orb-b"/>
+   <div className="admin-login-card card mx-auto max-w-md p-7 sm:p-9">
+    <div className="flex justify-center"><Image src="/aurevia-logo.png" alt="Aurevia Invest" width={92} height={92} className="admin-login-logo" priority/></div>
+    <div className="mt-4 text-center"><div className="gold text-xs font-bold tracking-[0.28em]">AUREVIA INVEST</div><h1 className="mt-2 text-3xl font-black">Administrator sign in</h1><p className="mt-2 muted">Restricted control-center access.</p></div>
+     <form onSubmit={submit} className="mt-7 space-y-4">
+       <label className="block"><span className="mb-1 block text-xs font-semibold uppercase tracking-wider muted">Admin username</span><input className="input" type="text" autoComplete="username" required placeholder="Username" value={username} onChange={e=>setUsername(e.target.value)}/></label>
+       <label className="block"><span className="mb-1 block text-xs font-semibold uppercase tracking-wider muted">Password</span><input className="input" type="password" autoComplete="current-password" required placeholder="Password" value={password} onChange={e=>setPassword(e.target.value)}/></label>
+       {error&&<p className="text-loss text-sm" role="alert">{error}</p>}
+       <button className="btn admin-login-button w-full bg-gold text-black" type="submit" disabled={busy}>{busy?'Authenticating…':'Enter control center'}</button>
+     </form>
+   </div>
+ </main>
+}

@@ -1,0 +1,237 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  FROZEN
+  SUSPENDED
+  CLOSED
+}
+
+enum KycStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  NEEDS_CHANGES
+}
+
+enum OrderSide {
+  BUY
+  SELL
+}
+
+enum OrderType {
+  MARKET
+  LIMIT
+  STOP
+}
+
+enum OrderStatus {
+  OPEN
+  PARTIALLY_FILLED
+  FILLED
+  CANCELLED
+  REJECTED
+}
+
+enum PositionStatus {
+  OPEN
+  CLOSED
+}
+
+enum FundingStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum FundingType {
+  DEPOSIT
+  WITHDRAWAL
+}
+
+enum EntryType {
+  DEBIT
+  CREDIT
+}
+
+model User {
+  id String @id @default(cuid())
+  email String @unique
+  passwordHash String
+  name String?
+  phone String?
+  country String?
+  role Role @default(USER)
+  status UserStatus @default(ACTIVE)
+  twoFactorEnabled Boolean @default(false)
+  termsAcceptedAt DateTime?
+  kycStatus KycStatus @default(PENDING)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  orders Order[]
+  positions Position[]
+  funding FundingRequest[]
+  ledgerAccounts LedgerAccount[]
+  auditLogs AuditLog[]
+  kyc KycProfile?
+}
+model KycProfile {
+  id String @id @default(cuid())
+  userId String @unique
+  user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+  legalName String?
+  dob DateTime?
+  address String?
+  idType String?
+  idNumber String?
+  submittedAt DateTime?
+  reviewedAt DateTime?
+  reviewNote String?
+}
+model Instrument {
+  id String @id @default(cuid())
+  symbol String @unique
+  name String
+  baseAsset String
+  quoteAsset String
+  price Decimal @db.Decimal(30,10)
+  tickSize Decimal @default(0.01) @db.Decimal(30,10)
+  leverage Decimal @default(1) @db.Decimal(10,2)
+  makerFee Decimal @default(0.001) @db.Decimal(10,6)
+  takerFee Decimal @default(0.0015) @db.Decimal(10,6)
+  enabled Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  orders Order[]
+  positions Position[]
+  candles Candle[]
+}
+model Candle {
+  id String @id @default(cuid())
+  instrumentId String
+  instrument Instrument @relation(fields:[instrumentId],references:[id],onDelete:Cascade)
+  ts DateTime
+  open Decimal @db.Decimal(30,10)
+  high Decimal @db.Decimal(30,10)
+  low Decimal @db.Decimal(30,10)
+  close Decimal @db.Decimal(30,10)
+  volume Decimal @db.Decimal(30,10)
+  @@unique([instrumentId,ts])
+  @@index([instrumentId,ts])
+}
+model Order {
+  id String @id @default(cuid())
+  userId String
+  instrumentId String
+  user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+  instrument Instrument @relation(fields:[instrumentId],references:[id])
+  side OrderSide
+  type OrderType
+  status OrderStatus @default(OPEN)
+  quantity Decimal @db.Decimal(30,10)
+  filledQuantity Decimal @default(0) @db.Decimal(30,10)
+  price Decimal? @db.Decimal(30,10)
+  stopPrice Decimal? @db.Decimal(30,10)
+  averageFillPrice Decimal? @db.Decimal(30,10)
+  fee Decimal @default(0) @db.Decimal(30,10)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  executions Execution[]
+  @@index([userId,status])
+}
+model Execution {
+  id String @id @default(cuid())
+  orderId String
+  order Order @relation(fields:[orderId],references:[id],onDelete:Cascade)
+  quantity Decimal @db.Decimal(30,10)
+  price Decimal @db.Decimal(30,10)
+  fee Decimal @db.Decimal(30,10)
+  createdAt DateTime @default(now())
+}
+model Position {
+  id String @id @default(cuid())
+  userId String
+  instrumentId String
+  user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+  instrument Instrument @relation(fields:[instrumentId],references:[id])
+  side OrderSide
+  quantity Decimal @db.Decimal(30,10)
+  entryPrice Decimal @db.Decimal(30,10)
+  leverage Decimal @default(1) @db.Decimal(10,2)
+  realizedPnl Decimal @default(0) @db.Decimal(30,10)
+  margin Decimal @default(0) @db.Decimal(30,10)
+  status PositionStatus @default(OPEN)
+  openedAt DateTime @default(now())
+  closedAt DateTime?
+  @@index([userId,status])
+}
+model LedgerAccount {
+  id String @id @default(cuid())
+  userId String?
+  user User? @relation(fields:[userId],references:[id],onDelete:Cascade)
+  code String @unique
+  name String
+  currency String @default("USD")
+  entries LedgerEntry[]
+  createdAt DateTime @default(now())
+}
+model LedgerTransaction {
+  id String @id @default(cuid())
+  reference String @unique
+  description String
+  createdAt DateTime @default(now())
+  entries LedgerEntry[]
+}
+model LedgerEntry {
+  id String @id @default(cuid())
+  transactionId String
+  accountId String
+  type EntryType
+  amount Decimal @db.Decimal(30,10)
+  transaction LedgerTransaction @relation(fields:[transactionId],references:[id],onDelete:Cascade)
+  account LedgerAccount @relation(fields:[accountId],references:[id])
+  createdAt DateTime @default(now())
+  @@index([accountId,createdAt])
+}
+model FundingRequest {
+  id String @id @default(cuid())
+  userId String
+  user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+  type FundingType
+  method String
+  amount Decimal @db.Decimal(30,10)
+  currency String @default("USD")
+  status FundingStatus @default(PENDING)
+  note String?
+  createdAt DateTime @default(now())
+  reviewedAt DateTime?
+  @@index([status,createdAt])
+}
+model SystemSetting {
+  key String @id
+  value String
+  updatedAt DateTime @updatedAt
+}
+model AuditLog {
+  id String @id @default(cuid())
+  actorId String?
+  actor User? @relation(fields:[actorId],references:[id],onDelete:SetNull)
+  action String
+  entity String
+  entityId String?
+  metadata Json?
+  createdAt DateTime @default(now())
+  @@index([createdAt])
+}
