@@ -29,19 +29,19 @@ export const authOptions:NextAuthOptions={
       const ok=await bcrypt.compare(password,u.passwordHash);
       if(!ok)return null;
       if(isAdminUsername&&u.role!=='ADMIN')return null;
-      return {id:u.id,email:u.email,name:u.name,role:u.role};
+      return {id:u.id,email:u.email,name:u.name,role:u.role,accountMode:u.accountMode};
     }
   })],
   callbacks:{
     async jwt({token,user}){
-      if(user){token.id=user.id;token.role=user.role;}
+      if(user){token.id=user.id;token.role=user.role;token.accountMode=user.accountMode;}
       if(token.id){
-        const current=await db.user.findUnique({where:{id:String(token.id)},select:{role:true,status:true}});
-        if(!current||current.status!=='ACTIVE'){token.id='';token.role=undefined;}
-        else token.role=current.role;
+        const current=await db.user.findUnique({where:{id:String(token.id)},select:{role:true,status:true,accountMode:true}});
+        if(!current||current.status!=='ACTIVE'){token.id='';token.role=undefined;token.accountMode=undefined;}
+        else{token.role=current.role;token.accountMode=current.accountMode;}
       }
       return token;
     },
-    async session({session,token}){if(session.user){session.user.id=String(token.id);session.user.role=token.role as 'USER'|'ADMIN';}return session}
+    async session({session,token}){if(session.user){session.user.id=String(token.id);session.user.role=token.role as 'USER'|'ADMIN';session.user.accountMode=token.accountMode as 'DEMO'|'REAL';}return session}
   }
 };

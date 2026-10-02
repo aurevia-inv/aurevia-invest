@@ -1,4 +1,58 @@
-import {NextResponse} from 'next/server';import {z} from 'zod';import {requireAdmin} from '@/lib/auth';import {db} from '@/lib/db';import {Prisma} from '@prisma/client';import {ensureSystemAccount,ensureUserLedger,postDoubleEntry} from '@/lib/ledger';
-const schema=z.object({id:z.string(),decision:z.enum(['APPROVED','REJECTED']),note:z.string().max(500).optional()});
-export async function GET(){try{await requireAdmin();return NextResponse.json(await db.fundingRequest.findMany({include:{user:{select:{email:true,name:true}}},where:{status:'PENDING'},orderBy:{createdAt:'asc'}}));}catch{return NextResponse.json({error:'Forbidden'},{status:403})}}
-export async function PATCH(req:Request){try{const admin=await requireAdmin();const p=schema.parse(await req.json());const f=await db.$transaction(async tx=>{const r=await tx.fundingRequest.findUnique({where:{id:p.id}});if(!r||r.status!=='PENDING')throw new Error('FUNDING_NOT_PENDING');if(p.decision==='APPROVED'){const user=await ensureUserLedger(tx,r.userId);const system=await ensureSystemAccount(tx,'SYSTEM:EXTERNAL_FUNDS','External Funding');if(r.type==='DEPOSIT')await postDoubleEntry(tx,{reference:`FUND:${r.id}`,description:'Approved deposit',debitAccountId:system.id,creditAccountId:user.id,amount:r.amount});else{const current=await tx.ledgerEntry.groupBy({by:['type'],where:{accountId:user.id},_sum:{amount:true}});const bal=current.reduce((n,x)=>x.type==='CREDIT'?n+Number(x._sum.amount??0):n-Number(x._sum.amount??0),0);if(bal<Number(r.amount))throw new Error('INSUFFICIENT_FUNDS');await postDoubleEntry(tx,{reference:`FUND:${r.id}`,description:'Approved withdrawal',debitAccountId:user.id,creditAccountId:system.id,amount:r.amount});}}return tx.fundingRequest.update({where:{id:r.id},data:{status:p.decision,note:p.note,reviewedAt:new Date()}})},{isolationLevel:Prisma.TransactionIsolationLevel.Serializable});await db.auditLog.create({data:{actorId:admin.id,action:'FUNDING_REVIEW',entity:'FUNDING',entityId:f.id,metadata:{decision:p.decision}}});return NextResponse.json(f);}catch(e){return NextResponse.json({error:e instanceof Error?e.message:'Review failed'},{status:400})}}
+import {NextResponse} from 'next/server';
+import {AccountMode,FundingStatus,FundingType,Prisma} from '@prisma/client';
+import {z,ZodError} from 'zod';
+import {requireAdmin} from '@/lib/auth';
+import {db} from '@/lib/db';
+import {ensureSystemAccount,ensureUserLedger,postDoubleEntry,balance} from '@/lib/ledger';
+import {jsonSafe} from '@/lib/serializers';
+
+const schema=z.object({id:z.string().min(1),decision:z.enum(['APPROVED','REJECTED']),note:z.string().trim().max(500).optional()});
+const pendingStatuses:FundingStatus[]=[FundingStatus.PENDING,FundingStatus.PENDING_REVIEW];
+
+export async function GET(req:Request){
+	try{
+		await requireAdmin();
+		const includeHistory=new URL(req.url).searchParams.get('history')==='true';
+		const requests=await db.fundingRequest.findMany({where:includeHistory?undefined:{status:{in:pendingStatuses}},include:{user:{select:{email:true,name:true}},paymentMethod:{select:{name:true}}},orderBy:{createdAt:includeHistory?'desc':'asc'},take:includeHistory?200:undefined});
+		return NextResponse.json(jsonSafe(requests));
+	}catch{
+		return NextResponse.json({error:'Forbidden'},{status:403});
+	}
+}
+
+export async function PATCH(req:Request){
+	try{
+		const admin=await requireAdmin();
+		const input=schema.parse(await req.json());
+		const request=await db.$transaction(async tx=>{
+			const current=await tx.fundingRequest.findUnique({where:{id:input.id}});
+			if(!current||!pendingStatuses.includes(current.status))throw new Error('FUNDING_NOT_PENDING');
+			if(current.accountMode===AccountMode.REAL){
+				const fundingUser=await tx.user.findUnique({where:{id:current.userId},select:{kycStatus:true}});
+				if(fundingUser?.kycStatus!=='APPROVED')throw new Error('REAL_KYC_REQUIRED');
+			}
+			const changed=await tx.fundingRequest.updateMany({where:{id:current.id,status:{in:pendingStatuses}},data:{status:input.decision,adminNote:input.note||null,reviewedAt:new Date(),verifiedAt:input.decision==='APPROVED'&&current.type===FundingType.DEPOSIT?new Date():null}});
+			if(changed.count!==1)throw new Error('FUNDING_ALREADY_REVIEWED');
+			if(input.decision==='APPROVED'){
+				const account=await ensureUserLedger(tx,current.userId,current.accountMode,current.currency);
+				const systemCode=`SYSTEM:EXTERNAL:${current.accountMode}:${current.currency}`;
+				const system=await ensureSystemAccount(tx,systemCode,'External funds',current.currency,current.accountMode);
+				if(current.type===FundingType.DEPOSIT){
+					await postDoubleEntry(tx,{reference:`FUNDING:${current.id}:APPROVED`,description:current.accountMode===AccountMode.REAL?'Admin manually verified deposit':'Approved demo deposit',debitAccountId:system.id,creditAccountId:account.id,amount:current.amount});
+				}else{
+					const available=await balance(tx,account.id);
+					if(available.lt(current.amount))throw new Error('INSUFFICIENT_FUNDS');
+					await postDoubleEntry(tx,{reference:`FUNDING:${current.id}:APPROVED`,description:'Admin approved withdrawal request',debitAccountId:account.id,creditAccountId:system.id,amount:current.amount});
+				}
+			}
+			const updated=await tx.fundingRequest.findUniqueOrThrow({where:{id:current.id}});
+			await tx.auditLog.create({data:{actorId:admin.id,action:`FUNDING_${input.decision}`,entity:'FUNDING',entityId:updated.id,metadata:{type:updated.type,accountMode:updated.accountMode,currency:updated.currency,amount:updated.amount.toString()}}});
+			return updated;
+		},{isolationLevel:Prisma.TransactionIsolationLevel.Serializable});
+		return NextResponse.json(jsonSafe(request));
+	}catch(error){
+		if(error instanceof ZodError)return NextResponse.json({error:'Invalid review details.'},{status:400});
+		if(error instanceof Error&&['FUNDING_NOT_PENDING','FUNDING_ALREADY_REVIEWED','INSUFFICIENT_FUNDS','REAL_KYC_REQUIRED'].includes(error.message))return NextResponse.json({error:error.message.replaceAll('_',' ').toLowerCase()},{status:409});
+		return NextResponse.json({error:'Funding review failed.'},{status:400});
+	}
+}

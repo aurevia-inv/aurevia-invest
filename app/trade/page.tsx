@@ -38,6 +38,7 @@ export default function Trade() {
   const [positions, setPositions] = useState<Pos[]>([]);
   const [book, setBook] = useState<any>({ bids: [], asks: [] });
   const [availableBalance, setAvailableBalance] = useState<number | null>(null);
+  const [accountMode, setAccountMode] = useState<'DEMO'|'REAL'|'LOADING'>('LOADING');
   const [placing, setPlacing] = useState(false);
   useEffect(() => {
     let active = true;
@@ -60,6 +61,7 @@ export default function Trade() {
         );
         if (market[0]) setSelected(market[0].id);
         setOrders(orderData);
+        setAccountMode(walletData.accountMode);
         setAvailableBalance(Number(walletData.balance));
         setPositions(
           positionData.map((position: any) => ({
@@ -122,6 +124,7 @@ export default function Trade() {
 
   async function place(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if(accountMode!=='DEMO'){setMsg('Real-account trading is unavailable because no external execution provider is connected.');return;}
     if (placing) return;
     setPlacing(true);
     setMsg("");
@@ -177,7 +180,8 @@ export default function Trade() {
     <>
       <Nav />
       <main className="trade-terminal">
-        <header className="account-heading"><div><span className="account-kicker">Trading workspace · Demo</span><h1>Trade markets</h1><p>Review simulated prices, order details, estimated costs, and account exposure before submitting.</p></div><span className="status-pill">Simulated prices</span></header>
+        <header className="account-heading"><div><span className="account-kicker">{accountMode==='LOADING'?'Restoring account mode':`${accountMode} ACCOUNT · Trading workspace`}</span><h1>Trade markets</h1><p>Market data and executions in this workspace are simulated and never affect REAL account balances.</p></div><span className={`status-pill ${accountMode==='REAL'?'mode-real':'mode-demo'}`}>{accountMode==='REAL'?'REAL · execution unavailable':'DEMO prices'}</span></header>
+        {accountMode==='REAL'&&<div className="account-callout mb-4"><span>Real-account trading is disabled because no external execution provider is connected. Switch to DEMO to use simulated orders; real ledger funds remain untouched.</span></div>}
         <div className="grid gap-4 xl:grid-cols-[1fr_340px]">
           <section className="card min-h-[650px] p-5">
             <div className="trade-market-select" role="group" aria-label="Select an instrument">
@@ -211,7 +215,7 @@ export default function Trade() {
                 <p className="trade-chart-note">Internal simulated market · prices update from the application demo feed.</p>
               </div>
               <div className="trade-orderbook">
-                <h3 className="font-bold">Order book <small>DEMO</small></h3>
+                <h3 className="font-bold">Order book <small>DEMO FEED ONLY</small></h3>
                 <div className="mt-3 text-xs">
                   {book.asks
                     ?.slice()
@@ -240,8 +244,9 @@ export default function Trade() {
             </div>
           </section>
           <section className="card p-5">
-            <div className="account-panel-title"><div><h2>Order ticket</h2><p className="account-panel-subtitle">Review the order estimate before submitting.</p></div><span className="status-pill">Demo</span></div>
+            <div className="account-panel-title"><div><h2>Order ticket</h2><p className="account-panel-subtitle">Review the order estimate before submitting.</p></div><span className={`status-pill ${accountMode==='REAL'?'mode-real':'mode-demo'}`}>{accountMode}</span></div>
             <form onSubmit={place} className="space-y-3">
+              <fieldset disabled={accountMode!=='DEMO'} className="space-y-3">
               <div className="grid grid-cols-2 gap-2" role="group" aria-label="Order side">
               <button type="button" aria-pressed={side === "BUY"}
                 onClick={() => setSide("BUY")}
@@ -261,7 +266,8 @@ export default function Trade() {
               {type !== "MARKET" && <label className="account-label">{type === "STOP" ? "Stop price" : "Limit price"}<input className="input" type="number" min="0.00000001" step="any" inputMode="decimal" required value={price} onChange={(event) => setPrice(event.target.value)} placeholder="0.00"/></label>}
               <div className="trade-estimate" aria-live="polite"><div><span>Available balance</span><b>{availableBalance===null?"Loading…":`$${availableBalance.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}`}</b></div><div><span>Estimated margin</span><b>{cur?`$${estimatedMargin.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}`:"—"}</b></div><div><span>Estimated fee</span><b>{cur?.takerFee===undefined?"Not configured":`$${estimatedFee.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:4})}`}</b></div></div>
               <p className="trade-estimate-note">Estimate uses the configured instrument price, leverage, and taker fee. Final validation happens on the server.</p>
-              <button type="submit" disabled={placing||!selected} className="btn w-full bg-gold text-black disabled:opacity-50">{placing?"Submitting…":`Place ${side} order`}</button>
+              <button type="submit" disabled={placing||!selected||accountMode!=='DEMO'} className="btn w-full bg-gold text-black disabled:opacity-50">{placing?"Submitting…":accountMode==='REAL'?'REAL trading unavailable':`Place ${side} order`}</button>
+              </fieldset>
               {msg&&<p className="text-sm muted" role="status">{msg}</p>}
             </form>
             <div className="mt-6">

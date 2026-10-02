@@ -12,6 +12,11 @@ enum Role {
   ADMIN
 }
 
+enum AccountMode {
+  DEMO
+  REAL
+}
+
 enum UserStatus {
   ACTIVE
   FROZEN
@@ -52,8 +57,12 @@ enum PositionStatus {
 
 enum FundingStatus {
   PENDING
+  PENDING_REVIEW
+  PROCESSING
   APPROVED
+  COMPLETED
   REJECTED
+  CANCELLED
 }
 
 enum FundingType {
@@ -66,6 +75,18 @@ enum EntryType {
   CREDIT
 }
 
+enum SupportStatus {
+  AWAITING_ADMIN
+  AWAITING_USER
+  RESOLVED
+}
+
+enum SupportAuthor {
+  USER
+  ADMIN
+  NOVA
+}
+
 model User {
   id String @id @default(cuid())
   email String @unique
@@ -74,6 +95,7 @@ model User {
   phone String?
   country String?
   role Role @default(USER)
+  accountMode AccountMode @default(DEMO)
   status UserStatus @default(ACTIVE)
   twoFactorEnabled Boolean @default(false)
   termsAcceptedAt DateTime?
@@ -86,6 +108,8 @@ model User {
   ledgerAccounts LedgerAccount[]
   auditLogs AuditLog[]
   kyc KycProfile?
+  supportConversations SupportConversation[]
+  supportMessages SupportMessage[]
 }
 model KycProfile {
   id String @id @default(cuid())
@@ -140,6 +164,7 @@ model Order {
   side OrderSide
   type OrderType
   status OrderStatus @default(OPEN)
+  accountMode AccountMode @default(DEMO)
   quantity Decimal @db.Decimal(30,10)
   filledQuantity Decimal @default(0) @db.Decimal(30,10)
   price Decimal? @db.Decimal(30,10)
@@ -173,6 +198,7 @@ model Position {
   realizedPnl Decimal @default(0) @db.Decimal(30,10)
   margin Decimal @default(0) @db.Decimal(30,10)
   status PositionStatus @default(OPEN)
+  accountMode AccountMode @default(DEMO)
   openedAt DateTime @default(now())
   closedAt DateTime?
   @@index([userId,status])
@@ -181,6 +207,7 @@ model LedgerAccount {
   id String @id @default(cuid())
   userId String?
   user User? @relation(fields:[userId],references:[id],onDelete:Cascade)
+  accountMode AccountMode @default(DEMO)
   code String @unique
   name String
   currency String @default("USD")
@@ -214,10 +241,72 @@ model FundingRequest {
   amount Decimal @db.Decimal(30,10)
   currency String @default("USD")
   status FundingStatus @default(PENDING)
+  accountMode AccountMode @default(DEMO)
+  paymentMethodId String?
+  paymentMethod PaymentMethod? @relation(fields:[paymentMethodId],references:[id],onDelete:SetNull)
+  idempotencyKey String? @unique
+  transactionReference String?
+  referenceInfo String?
+  destinationInfo String?
+  senderInfo String?
+  beneficiaryInfo String?
+  network String?
   note String?
+  adminNote String?
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
   reviewedAt DateTime?
+  verifiedAt DateTime?
+  supportConversations SupportConversation[]
   @@index([status,createdAt])
+  @@index([userId,accountMode,createdAt])
+}
+model PaymentMethod {
+  id String @id @default(cuid())
+  name String
+  enabled Boolean @default(true)
+  demoOnly Boolean @default(false)
+  depositEnabled Boolean @default(true)
+  withdrawalEnabled Boolean @default(true)
+  requiresNetwork Boolean @default(false)
+  currencies String[] @default(["USD"])
+  destination String?
+  instructions String?
+  minimumAmount Decimal @default(0) @db.Decimal(30,10)
+  maximumAmount Decimal? @db.Decimal(30,10)
+  processingNotes String?
+  displayOrder Int @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  fundingRequests FundingRequest[]
+  @@index([enabled,displayOrder])
+}
+model SupportConversation {
+  id String @id @default(cuid())
+  userId String
+  user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+  accountMode AccountMode @default(DEMO)
+  subject String
+  status SupportStatus @default(AWAITING_ADMIN)
+  transactionId String?
+  transaction FundingRequest? @relation(fields:[transactionId],references:[id],onDelete:SetNull)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  lastMessageAt DateTime @default(now())
+  messages SupportMessage[]
+  @@index([userId,createdAt])
+  @@index([status,lastMessageAt])
+}
+model SupportMessage {
+  id String @id @default(cuid())
+  conversationId String
+  conversation SupportConversation @relation(fields:[conversationId],references:[id],onDelete:Cascade)
+  authorType SupportAuthor
+  authorId String?
+  author User? @relation(fields:[authorId],references:[id],onDelete:SetNull)
+  body String
+  createdAt DateTime @default(now())
+  @@index([conversationId,createdAt])
 }
 model SystemSetting {
   key String @id

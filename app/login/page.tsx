@@ -1,6 +1,6 @@
 'use client';
 import {FormEvent,useState} from 'react';
-import {signIn} from 'next-auth/react';
+import {signIn,useSession} from 'next-auth/react';
 import {useRouter} from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -12,6 +12,7 @@ export default function Login(){
  const [error,setError]=useState('');
  const [busy,setBusy]=useState(false);
  const router=useRouter();
+ const {update}=useSession();
 
  async function submit(event:FormEvent<HTMLFormElement>){
   event.preventDefault();
@@ -20,7 +21,7 @@ export default function Login(){
   setError('');
   try{
    const result=await signIn('credentials',{username:identifier,email:identifier,password,redirect:false});
-   if(result?.ok)router.replace('/dashboard');
+  if(result?.ok){await update();router.replace('/dashboard');router.refresh();}
    else setError('Invalid credentials or inactive account.');
   }catch{
    setError('Unable to reach the authentication service. Please try again.');

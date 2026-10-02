@@ -2,6 +2,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import {Activity,ArrowRight,ArrowUpRight,BookOpen,Check,ChevronDown,CircleHelp,Globe2,Landmark,LockKeyhole,ShieldCheck,WalletCards} from 'lucide-react';
 import Nav from '@/components/Nav';
+import HomeAccountActions from '@/components/HomeAccountActions';
 import HomeMarketPreview from '@/components/HomeMarketPreview';
 import HomeMarketTicker from '@/components/HomeMarketTicker';
 
@@ -52,7 +53,7 @@ export default function Home(){
 					<div className="home-brand-lockup"><Image src="/aurevia-logo.png" alt="Aurevia Invest" width={46} height={46} priority/><span>AUREVIA <b>INVEST</b></span></div>
 					<h1>Invest with clarity.<br/><em>Trade with confidence.</em></h1>
 					<p className="home-hero-lede">Explore market information, review your portfolio, and manage supported demo positions from one considered workspace.</p>
-					<div className="home-hero-actions"><Link href="/register" className="button-primary">Open an account <ArrowUpRight size={17}/></Link><Link href="/login?callbackUrl=%2Ftrade" className="button-secondary">Explore markets <ArrowRight size={16}/></Link></div>
+					<div className="home-hero-actions"><HomeAccountActions variant="hero"/></div>
 					<div className="home-hero-note"><span className="note-mark"><Check size={14}/></span><span>Demo environment <i/> Market prices and funding are simulated</span></div>
 				</div>
 				<div className="home-hero-visual"><HomeMarketPreview/><div className="hero-caption"><span>01 / MARKET VIEW</span><span>SIMULATED ENVIRONMENT</span></div></div>
@@ -74,7 +75,7 @@ export default function Home(){
 
 			<section className="home-section markets-section" id="markets">
 				<div className="section-heading"><div><p className="eyebrow">MARKETS</p><h2>Explore what’s<br/><em>available.</em></h2></div><p className="section-intro">Availability reflects instruments configured in this application. The current feed is simulated, not connected to external venues.</p></div>
-				<div className="asset-grid">{assetClasses.map(item=>{const Icon=item.icon;return <article className={`asset-item ${item.available?'asset-available':'asset-coming'}`} key={item.name}><div className="asset-top"><span className="asset-icon"><Icon size={20} strokeWidth={1.6}/></span><span className="asset-state">{item.status}</span></div><h3>{item.name}</h3><p>{item.copy}</p>{item.available?<Link href="/login?callbackUrl=%2Ftrade" className="asset-link">Explore in demo <ArrowUpRight size={15}/></Link>:<span className="asset-link asset-link-muted">Coming soon</span>}</article>})}</div>
+				<div className="asset-grid">{assetClasses.map(item=>{const Icon=item.icon;return <article className={`asset-item ${item.available?'asset-available':'asset-coming'}`} key={item.name}><div className="asset-top"><span className="asset-icon"><Icon size={20} strokeWidth={1.6}/></span><span className="asset-state">{item.status}</span></div><h3>{item.name}</h3><p>{item.copy}</p>{item.available?<HomeAccountActions variant="market"/>:<span className="asset-link asset-link-muted">Coming soon</span>}</article>})}</div>
 			</section>
 
 			<section className="preview-section" id="portfolio">
@@ -84,7 +85,7 @@ export default function Home(){
 			</section>
 
 			<section className="home-section trading-section" id="trading">
-				<div className="trading-copy"><p className="eyebrow">TRADING WORKSPACE</p><h2>Plan the order.<br/><em>Understand the details.</em></h2><p>Review instrument pricing, order type, estimated fees, and available ledger balance before submitting supported demo trades.</p><Link href="/login?callbackUrl=%2Ftrade" className="text-link">View the trading workspace <ArrowRight size={16}/></Link></div>
+				<div className="trading-copy"><p className="eyebrow">TRADING WORKSPACE</p><h2>Plan the order.<br/><em>Understand the details.</em></h2><p>Review instrument pricing, order type, estimated fees, and available ledger balance before submitting supported demo trades.</p><HomeAccountActions variant="trade"/></div>
 				<div className="trade-steps"><div><span>01</span><b>Choose an instrument</b><small>Review the simulated market price.</small></div><div><span>02</span><b>Set order details</b><small>Select a supported side and order type.</small></div><div><span>03</span><b>Review before submit</b><small>Check estimated fees and available balance.</small></div></div>
 			</section>
 
@@ -96,12 +97,12 @@ export default function Home(){
 
 			<section className="home-section faq-section" id="faq"><div className="section-heading"><div><p className="eyebrow">GOOD TO KNOW</p><h2>Questions,<br/><em>answered clearly.</em></h2></div><p className="section-intro">A quick guide to the current Aurevia demo environment.</p></div><div className="faq-list">{questions.map(([question,answer])=><details key={question}><summary>{question}<ChevronDown size={18}/></summary><p>{answer}</p></details>)}</div></section>
 
-			<section className="home-cta" id="support"><div><p className="eyebrow">AUREVIA INVEST</p><h2>Explore the platform<br/><em>at your own pace.</em></h2><p>Open an account to access the demo workspace, or sign in to continue.</p></div><div className="home-cta-actions"><Link href="/register" className="button-primary">Open an account <ArrowUpRight size={17}/></Link><Link href="/login" className="button-secondary">Sign in <ArrowRight size={16}/></Link></div></section>
+			<section className="home-cta" id="support"><div><p className="eyebrow">AUREVIA INVEST</p><h2>Explore the platform<br/><em>at your own pace.</em></h2><p>Choose your account type and access clearly labeled account tools.</p></div><div className="home-cta-actions"><HomeAccountActions variant="cta"/></div></section>
 		</main>
 		<Footer/>
 	</>;
 }
 
 function Footer(){
-	return <footer className="home-footer"><div className="footer-main"><div className="footer-brand"><Link href="/" className="footer-logo"><Image src="/aurevia-logo.png" alt="Aurevia Invest" width={42} height={42}/><span>AUREVIA <b>INVEST</b></span></Link><p>A considered workspace for exploring markets and understanding your account.</p><span className="footer-demo-label">DEMO DATA · NO EXTERNAL EXECUTION</span></div><div className="footer-column"><b>Platform</b><Link href="/login?callbackUrl=%2Fdashboard">Dashboard</Link><Link href="/login?callbackUrl=%2Ftrade">Trading</Link><Link href="/login?callbackUrl=%2Fwallet">Wallet</Link><Link href="/login?callbackUrl=%2Fkyc">Verification</Link></div><div className="footer-column"><b>Explore</b><a href="#markets">Markets</a><a href="#education">Education</a><a href="#news">Market information</a><a href="#faq">FAQs</a></div><div className="footer-column"><b>Information</b><Link href="/risk-disclosure">Risk disclosure</Link><a href="#security">Security</a><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link><Link href="/support">Support</Link><Link href="/register">Open account</Link></div></div><div className="footer-bottom"><span>© {new Date().getFullYear()} Aurevia Invest</span><span>Demo environment · No external market or funding provider connected</span></div></footer>;
+	return <footer className="home-footer"><div className="footer-main"><div className="footer-brand"><Link href="/" className="footer-logo"><Image src="/aurevia-logo.png" alt="Aurevia Invest" width={42} height={42}/><span>AUREVIA <b>INVEST</b></span></Link><p>A considered workspace for exploring markets and understanding your account.</p><span className="footer-demo-label">DEMO DATA · NO EXTERNAL EXECUTION</span></div><div className="footer-column"><b>Platform</b><Link href="/dashboard">Dashboard</Link><Link href="/trade">Trading</Link><Link href="/wallet">Wallet</Link><Link href="/kyc">Verification</Link></div><div className="footer-column"><b>Explore</b><a href="#markets">Markets</a><a href="#education">Education</a><a href="#news">Market information</a><a href="#faq">FAQs</a></div><div className="footer-column"><b>Information</b><Link href="/risk-disclosure">Risk disclosure</Link><a href="#security">Security</a><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link><Link href="/support">Support</Link></div></div><div className="footer-bottom"><span>© {new Date().getFullYear()} Aurevia Invest</span><span>Demo environment · No external market or funding provider connected</span></div></footer>;
 }

@@ -397,6 +397,76 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,su
 .wallet-balance-panel:after{position:absolute;right:-26px;bottom:-90px;width:220px;height:220px;border:1px solid rgba(197,164,107,.16);border-radius:50%;content:"";box-shadow:0 0 0 25px rgba(197,164,107,.025),0 0 0 50px rgba(197,164,107,.018)}
 .wallet-balance-value{position:relative;z-index:1;margin-top:10px;color:#f1f2eb;font-size:38px;font-weight:500;font-variant-numeric:tabular-nums}
 .wallet-demo-note{position:relative;z-index:1;margin-top:8px;color:#99a79b;font-size:10px}
+.wallet-currency-list{position:relative;z-index:1;display:flex;flex-wrap:wrap;gap:8px;margin-top:15px}
+.wallet-currency-list span{padding:6px 9px;border:1px solid rgba(220,230,221,.12);color:#c4d0c5;font-size:10px;font-variant-numeric:tabular-nums}
+.mode-demo{border-color:rgba(113,176,125,.38);color:#a9d0ac}
+.mode-real{border-color:rgba(197,164,107,.45);color:var(--a-brass-soft)}
+.wallet-type-switch{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:4px;border:1px solid var(--a-line);background:rgba(255,255,255,.02)}
+.wallet-type-switch button{display:flex;min-height:38px;align-items:center;justify-content:center;gap:7px;border:0;background:transparent;color:#99a69b;font-size:11px}
+.wallet-type-switch button[aria-pressed="true"]{background:rgba(197,164,107,.12);color:var(--a-brass-soft)}
+.deposit-instructions{justify-content:space-between;align-items:center;min-width:0}
+.deposit-instructions>div{min-width:0}
+.account-mode-notice{align-items:center;justify-content:space-between;margin:-8px 0 16px}
+.account-confirm-panel{padding:14px;border:1px solid rgba(197,164,107,.35);background:rgba(197,164,107,.07)}
+.account-confirm-panel h3{margin:0;color:#e7eade;font-size:12px}
+.account-confirm-panel p{margin:7px 0 0;color:#aab5aa;font-size:10px;line-height:1.6}
+.transaction-detail-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 24px;margin-top:20px}
+.transaction-detail-grid>div{min-width:0;padding-bottom:12px;border-bottom:1px solid var(--a-line)}
+.home-auth-actions{display:flex;flex-wrap:wrap;gap:11px;align-items:center}
+.home-hero-actions>.home-auth-actions{margin:0}
+.home-auth-actions[aria-busy="true"]{min-height:48px}
+.mode-switch-wrap{display:flex;align-items:center}
+.mode-switch{min-height:34px;padding:0 9px;border:1px solid rgba(197,164,107,.32);border-radius:4px;background:#0b1811;color:var(--a-brass-soft);font-size:9px;font-weight:700}
+.admin-payment-toggles{display:flex;flex-wrap:wrap;gap:14px 20px;padding:11px 0;border-block:1px solid var(--a-line)}
+.admin-payment-toggles label{display:flex;align-items:center;gap:7px;color:#a9b4aa;font-size:10px}
+.admin-method{padding:14px;border:1px solid var(--a-line);background:rgba(255,255,255,.018)}
+.admin-method>b,.admin-method small{display:block}
+.admin-method>b{color:#e0e7de;font-size:12px}
+.admin-method small,.admin-method p{margin-top:6px;color:#8e9a90;font-size:9px;line-height:1.6;overflow-wrap:anywhere}
+.admin-funding-list{display:grid}
+.admin-funding-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(190px,.6fr) auto;align-items:center;gap:14px;padding:16px 0;border-bottom:1px solid var(--a-line)}
+.admin-funding-summary{display:grid;gap:5px;min-width:0}
+.admin-funding-summary>b{color:#e1e7df;font-size:11px}
+.admin-funding-summary>span,.admin-funding-summary>small{color:#95a196;font-size:9px;overflow-wrap:anywhere}
+.support-layout{grid-template-columns:minmax(0,1.2fr) minmax(280px,.8fr)}
+.support-layout .account-panel-title h2{display:flex;align-items:center;gap:8px}
+.nova-thread{display:flex;min-height:265px;max-height:430px;flex-direction:column;gap:12px;overflow-y:auto;padding:14px 2px}
+.nova-message{max-width:88%;padding:11px 13px;border:1px solid rgba(220,230,221,.12);background:rgba(255,255,255,.025)}
+.nova-message.is-user{align-self:flex-end;border-color:rgba(197,164,107,.25);background:rgba(197,164,107,.07)}
+.nova-message>span{color:var(--a-brass-soft);font-size:8px;font-weight:700;letter-spacing:.1em}
+.nova-message p{margin:5px 0 0;color:#c1cbc1;font-size:10px;line-height:1.65;white-space:pre-wrap}
+.nova-input-row{display:grid;grid-template-columns:minmax(0,1fr) 42px;gap:8px}
+.nova-input-row button{display:grid;place-items:center}
+.support-ticket-list{display:grid;gap:7px;margin-top:12px}
+.support-ticket{border:1px solid var(--a-line);background:rgba(255,255,255,.018)}
+.support-ticket-toggle,.support-inbox-item{display:grid;width:100%;gap:6px;padding:12px;border:0;background:transparent;color:#d8dfd7;text-align:left}
+.support-ticket-toggle{grid-template-columns:minmax(0,1fr) 16px;align-items:center}
+.support-ticket-toggle>span,.support-ticket-toggle>small{grid-column:1}
+.support-ticket-toggle>svg{grid-column:2;grid-row:1/4;color:var(--a-brass)}
+.support-ticket-toggle>span{font-size:11px;font-weight:600}
+.support-ticket-toggle>small,.support-inbox-item small{color:#89968d;font-size:8px}
+.support-ticket-toggle:hover,.support-inbox-item:hover,.support-inbox-item.is-selected{background:rgba(197,164,107,.06)}
+.support-message-list{display:grid;gap:10px;padding:0 12px 12px}
+.support-message-history{display:grid;gap:8px;max-height:250px;overflow:auto}
+.support-message-history>div{padding:9px;border-top:1px solid var(--a-line)}
+.support-message-history b{color:var(--a-brass-soft);font-size:8px}
+.support-message-history p{margin:5px 0 0;color:#c0cac0;font-size:9px;line-height:1.6;white-space:pre-wrap}
+.support-reply{display:grid;grid-template-columns:minmax(0,1fr) 36px;gap:7px}
+.support-reply button{display:grid;place-items:center}
+.admin-support-layout{display:grid;grid-template-columns:minmax(240px,.65fr) minmax(0,1.35fr);gap:15px}
+.support-inbox-item{border-bottom:1px solid var(--a-line);cursor:pointer}
+.support-inbox-item b{color:#e1e7df;font-size:10px}
+.support-inbox-item span{color:#a4afa5;font-size:9px}
+.support-admin-messages{display:grid;gap:10px;max-height:480px;overflow:auto;margin:20px 0;padding-right:3px}
+.support-admin-messages article{padding:12px;border:1px solid var(--a-line);background:rgba(255,255,255,.018)}
+.support-admin-messages article>div{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;color:var(--a-brass-soft);font-size:8px}
+.support-admin-messages time{color:#89968d}
+.support-admin-messages p{margin:8px 0 0;color:#c2ccc2;font-size:10px;line-height:1.65;white-space:pre-wrap}
+.support-context{display:grid;gap:10px;margin-top:18px;padding:12px;border:1px solid var(--a-line)}
+.support-context dt{color:#87948a;font-size:8px;text-transform:uppercase}
+.support-context dd{margin:4px 0 0;color:#d4ddd4;font-size:10px;overflow-wrap:anywhere}
+.support-admin-reply{display:grid;gap:12px;border-top:1px solid var(--a-line);padding-top:16px}
+.home-auth-actions{flex-wrap:wrap}
 
 @keyframes aurevia-enter{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
 
@@ -540,10 +610,15 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,su
   .home-cta{display:block;padding:47px 22px}
   .home-cta h2{font-size:39px}
   .home-cta-actions{margin-top:23px}
+  .home-auth-actions{gap:8px}
+  .home-auth-actions .button-primary,.home-auth-actions .button-secondary{min-height:44px}
   .footer-main{grid-template-columns:repeat(2,minmax(0,1fr));gap:29px 20px;width:calc(100% - 40px);padding-block:43px}
   .footer-brand{grid-column:1/-1;max-width:330px}
   .footer-bottom{display:grid;gap:7px;padding:13px 20px;font-size:8px}
   .account-page,.trade-terminal{width:calc(100% - 32px);padding-top:30px}
+  .admin-support-layout,.support-layout{grid-template-columns:1fr}
+  .admin-funding-row{grid-template-columns:1fr;align-items:stretch}
+  .admin-funding-row>.flex{flex-wrap:wrap}
   .account-heading{display:block;margin-bottom:20px}
   .account-heading h1{font-size:36px}
   .account-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -553,6 +628,8 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,su
   .account-metric b{font-size:18px}
   .verification-steps{grid-template-columns:1fr 1fr;gap:10px}
   .wallet-balance-value{font-size:32px}
+  .transaction-detail-grid{grid-template-columns:1fr;gap:13px}
+  .account-mode-notice{align-items:flex-start;flex-direction:column}
   .trade-terminal{padding-bottom:50px}
   .trade-terminal .account-heading h1{font-size:35px}
   .trade-terminal .card.min-h-\[650px\]{min-height:0}

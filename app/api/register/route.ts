@@ -1,6 +1,6 @@
 import {NextResponse} from 'next/server';
 import bcrypt from 'bcryptjs';
-import {Prisma} from '@prisma/client';
+import {AccountMode,Prisma} from '@prisma/client';
 import {z,ZodError} from 'zod';
 import {db} from '@/lib/db';
 import {ensureUserLedger,ensureSystemAccount} from '@/lib/ledger';
@@ -12,6 +12,7 @@ const schema=z.object({
 	name:z.string().trim().min(2).max(120),
 	country:z.string().trim().min(2).max(80),
 	phone:z.string().trim().max(40).optional().or(z.literal('')),
+	accountMode:z.nativeEnum(AccountMode),
 	termsAccepted:z.literal(true)
 });
 
@@ -21,8 +22,8 @@ export async function POST(req:Request){
 		const p=schema.parse(await req.json());
 		const email=p.email.toLowerCase();
 		const user=await db.$transaction(async tx=>{
-			const created=await tx.user.create({data:{email,passwordHash:await bcrypt.hash(p.password,12),name:p.name,country:p.country,phone:p.phone||null,termsAcceptedAt:new Date()}});
-			await ensureUserLedger(tx,created.id);
+			const created=await tx.user.create({data:{email,passwordHash:await bcrypt.hash(p.password,12),name:p.name,country:p.country,phone:p.phone||null,accountMode:p.accountMode,termsAcceptedAt:new Date()}});
+			await ensureUserLedger(tx,created.id,p.accountMode);
 			await ensureSystemAccount(tx,'SYSTEM:LIABILITY','Customer Funds');
 			return created;
 		});
