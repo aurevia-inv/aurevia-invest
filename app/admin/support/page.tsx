@@ -1,6 +1,6 @@
 'use client';
 
-import {FormEvent,useEffect,useState} from 'react';
+import {FormEvent,useCallback,useEffect,useState} from 'react';
 import Link from 'next/link';
 import {ArrowLeft,CheckCheck,MessageSquareText,RefreshCw,Send} from 'lucide-react';
 import Nav from '@/components/Nav';
@@ -17,13 +17,13 @@ export default function AdminSupport(){
 	const [loading,setLoading]=useState(true);
 	const selected=items.find(item=>item.id===selectedId);
 
-	async function load(){
+	const load=useCallback(async()=>{
 		setLoading(true);
-		try{const response=await fetch('/api/admin/support');const result=await response.json();if(!response.ok)throw new Error('Administrator authorization required.');setItems(result);setError('');if(!selectedId&&result[0])setSelectedId(result[0].id)}
+		try{const response=await fetch('/api/admin/support');const result=await response.json();if(!response.ok)throw new Error('Administrator authorization required.');setItems(result);setError('');setSelectedId(current=>current||result[0]?.id||'')}
 		catch(exception){setError(exception instanceof Error?exception.message:'Unable to load support inbox.')}
 		finally{setLoading(false)}
-	}
-	useEffect(()=>{void load()},[]);
+	},[]);
+	useEffect(()=>{void load()},[load]);
 
 	async function update(action:'reply'|'resolve',event?:FormEvent<HTMLFormElement>){
 		event?.preventDefault();if(!selected||busy)return;setBusy(true);setError('');setNotice('');

@@ -1,10 +1,11 @@
 import {NextResponse} from 'next/server';
-import {Prisma,FundingStatus,FundingType} from '@prisma/client';
+import {Prisma,FundingStatus,FundingType,NotificationType} from '@prisma/client';
 import {z,ZodError} from 'zod';
 import {requireUser} from '@/lib/auth';
 import {db} from '@/lib/db';
 import {balance} from '@/lib/ledger';
 import {jsonSafe} from '@/lib/serializers';
+import {createNotification} from '@/lib/notifications';
 
 const schema=z.object({
 	type:z.nativeEnum(FundingType),
@@ -51,7 +52,7 @@ export async function POST(req:Request){
 			const duplicate=await tx.fundingRequest.findUnique({where:{idempotencyKey}});
 			if(duplicate){
 				if(duplicate.userId!==user.id||duplicate.accountMode!==user.accountMode||duplicate.type!==parsed.type||!duplicate.amount.equals(parsed.amount)||duplicate.currency!==currency||duplicate.paymentMethodId!==parsed.paymentMethodId)throw new Error('IDEMPOTENCY_KEY_REUSED');
-				return duplicate;
+				return {request:duplicate,replay:true};
 			}
 			const method=await tx.paymentMethod.findUnique({where:{id:parsed.paymentMethodId}});
 			const methodEnabled=!!method?.enabled&&(parsed.type==='DEPOSIT'?method.depositEnabled:method.withdrawalEnabled);
@@ -70,7 +71,7 @@ export async function POST(req:Request){
 				const reserved=pending._sum.amount??new Prisma.Decimal(0);
 				if(currentBalance.lt(amount.plus(reserved)))throw new Error('INSUFFICIENT_AVAILABLE_BALANCE');
 			}
-			return tx.fundingRequest.create({data:{
+			const request=await tx.fundingRequest.create({data:{
 				userId:user.id,
 				type:parsed.type,
 				method:method.name,
@@ -88,8 +89,12 @@ export async function POST(req:Request){
 				network:parsed.network||null,
 				note:parsed.note||null,
 			}});
+			await tx.auditLog.create({data:{actorId:user.id,action:'FUNDING_SUBMITTED',entity:'FUNDING',entityId:request.id,metadata:{type:request.type,accountMode:request.accountMode,currency:request.currency,amount:request.amount.toString()}}});
+			const notificationType=request.type===FundingType.DEPOSIT?NotificationType.DEPOSIT:NotificationType.WITHDRAWAL;
+			await createNotification(tx,{userId:user.id,type:notificationType,title:`${request.type==='DEPOSIT'?'Deposit':'Withdrawal'} submitted`,message:`Your ${request.type.toLowerCase()} request is pending administrator review. No transfer has been confirmed.`,dedupeKey:`funding:${request.id}:submitted`,relatedEntity:'FUNDING',relatedId:request.id,actionUrl:`/wallet/transactions/${request.id}`});
+			return {request,replay:false};
 		},{isolationLevel:Prisma.TransactionIsolationLevel.Serializable});
-		return NextResponse.json(jsonSafe(result),{status:201});
+		return NextResponse.json(jsonSafe(result.request),{status:result.replay?200:201});
 	}catch(error){
 		if(error instanceof ZodError)return NextResponse.json({error:'Check the funding details and try again.'},{status:400});
 		if(error instanceof Prisma.PrismaClientKnownRequestError&&error.code==='P2002')return NextResponse.json({error:'This submission was already received.'},{status:409});

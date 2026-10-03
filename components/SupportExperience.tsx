@@ -1,10 +1,11 @@
 'use client';
 
-import {FormEvent,useEffect,useState} from 'react';
+import {FormEvent,useCallback,useEffect,useState} from 'react';
 import Link from 'next/link';
 import {useSession} from 'next-auth/react';
 import {Bot,ChevronDown,Send,ShieldAlert,TicketCheck} from 'lucide-react';
 import Nav from '@/components/Nav';
+import {supportContact} from '@/lib/config';
 
 type ChatMessage={speaker:'user'|'nova';text:string};
 type Conversation={id:string;subject:string;status:string;createdAt:string;lastMessageAt:string;transaction?:{id:string;type:string;status:string;amount:string;currency:string}|null;messages:Array<{id:string;authorType:string;body:string;createdAt:string}>};
@@ -37,18 +38,22 @@ export default function SupportExperience(){
 	const [reply,setReply]=useState('');
 	const [notice,setNotice]=useState('');
 	const [error,setError]=useState('');
+	const [historyError,setHistoryError]=useState('');
+	const [historyLoading,setHistoryLoading]=useState(false);
 	const [busy,setBusy]=useState(false);
 
-	async function load(){
+	const load=useCallback(async(showLoading=false)=>{
 		if(status!=='authenticated')return;
+		if(showLoading){setHistoryLoading(true);setConversations([]);setTransactions([]);setSelectedConversation('');setReply('')}
 		try{
 			const [supportResponse,walletResponse]=await Promise.all([fetch('/api/support'),fetch('/api/wallet')]);
 			const [supportData,walletData]=await Promise.all([supportResponse.json(),walletResponse.json()]);
 			if(!supportResponse.ok||!walletResponse.ok)throw new Error('Unable to load account support history.');
-			setConversations(supportData);setTransactions(walletData.transactions);
-		}catch(exception){setError(exception instanceof Error?exception.message:'Unable to load account support history.')}
-	}
-	useEffect(()=>{void load()},[status]);
+			setConversations(supportData);setTransactions(walletData.transactions);setHistoryError('');
+		}catch(exception){setHistoryError(exception instanceof Error?exception.message:'Unable to load account support history.')}
+		finally{if(showLoading)setHistoryLoading(false)}
+	},[status]);
+	useEffect(()=>{void load(true)},[load,mode]);
 
 	const selected=conversations.find(item=>item.id===selectedConversation);
 	function ask(event:FormEvent<HTMLFormElement>){event.preventDefault();const text=question.trim();if(!text)return;setMessages(current=>[...current,{speaker:'user',text},{speaker:'nova',text:answerFor(text,mode)}]);setQuestion('')}
@@ -90,7 +95,8 @@ export default function SupportExperience(){
 				</>:<p className="muted md:col-span-2">Sign in to create a ticket tied to your account. <Link className="gold" href="/login">Sign in</Link></p>}</form>}
 				{notice&&<p className="mt-3 text-sm text-profit" role="status">{notice}</p>}{error&&<p className="mt-3 text-sm text-loss" role="alert">{error}</p>}
 			</section>
-			<aside className="account-panel card p-5"><div className="account-panel-title"><div><h2><TicketCheck size={17} className="gold"/> Your support tickets</h2><p className="account-panel-subtitle">Private to your account and selected mode</p></div></div>{status!=='authenticated'?<p className="account-empty">Sign in to view your support history.</p>:conversations.length?<div className="support-ticket-list">{conversations.map(conversation=><article className="support-ticket" key={conversation.id}><button type="button" className="support-ticket-toggle" aria-expanded={selectedConversation===conversation.id} onClick={()=>setSelectedConversation(selectedConversation===conversation.id?'':conversation.id)}><span>{conversation.subject}</span><small>{conversation.status.replaceAll('_',' ')} · {new Date(conversation.lastMessageAt||conversation.createdAt).toLocaleString()}</small>{conversation.transaction&&<small>Reference {conversation.transaction.id}</small>}<ChevronDown size={14}/></button>{selectedConversation===conversation.id&&<div className="support-message-list"><div className="support-message-history">{conversation.messages.map(item=><div key={item.id}><b>{item.authorType.replaceAll('_',' ')}</b><p>{item.body}</p></div>)}</div>{conversation.status!=='RESOLVED'&&<form onSubmit={sendReply} className="support-reply"><input className="input" value={reply} onChange={event=>setReply(event.target.value)} maxLength={4000} placeholder="Reply to this ticket" aria-label="Reply to support ticket"/><button className="btn bg-gold text-black" type="submit" disabled={busy||!reply.trim()} aria-label="Send reply"><Send size={14}/></button></form>}</div>}</article>)}</div>:<p className="account-empty">No support tickets yet.</p>}</aside>
+			<aside className="account-panel card p-5"><div className="account-panel-title"><div><h2><TicketCheck size={17} className="gold"/> Your support tickets</h2><p className="account-panel-subtitle">Private to your account and selected mode</p></div></div>{status!=='authenticated'?<p className="account-empty">Sign in to view your support history.</p>:historyLoading?<p className="account-empty" role="status">Loading support tickets…</p>:historyError?<div className="account-empty transaction-history-error" role="alert"><span>{historyError}</span><button type="button" className="text-link" onClick={()=>void load(true)}>Retry</button></div>:conversations.length?<div className="support-ticket-list">{conversations.map(conversation=><article className="support-ticket" key={conversation.id}><button type="button" className="support-ticket-toggle" aria-expanded={selectedConversation===conversation.id} onClick={()=>setSelectedConversation(selectedConversation===conversation.id?'':conversation.id)}><span>{conversation.subject}</span><small>{conversation.status.replaceAll('_',' ')} · {new Date(conversation.lastMessageAt||conversation.createdAt).toLocaleString()}</small>{conversation.transaction&&<small>Reference {conversation.transaction.id}</small>}<ChevronDown size={14}/></button>{selectedConversation===conversation.id&&<div className="support-message-list"><div className="support-message-history">{conversation.messages.map(item=><div key={item.id}><b>{item.authorType.replaceAll('_',' ')}</b><p>{item.body}</p></div>)}</div>{conversation.status!=='RESOLVED'&&<form onSubmit={sendReply} className="support-reply"><input className="input" value={reply} onChange={event=>setReply(event.target.value)} maxLength={4000} placeholder="Reply to support ticket" aria-label="Reply to support ticket"/><button className="btn bg-gold text-black" type="submit" disabled={busy||!reply.trim()} aria-label="Send reply"><Send size={14}/></button></form>}</div>}</article>)}</div>:<p className="account-empty">No support tickets yet.</p>}</aside>
+			<section className="account-panel card p-5 support-contact-panel"><div className="account-panel-title"><div><h2>Contact support</h2><p className="account-panel-subtitle">Reach the support team directly or create a ticket for admin review.</p></div><ShieldAlert size={18} className="gold"/></div><a href={`mailto:${supportContact.email}`}>{supportContact.email}</a><a href={`tel:${supportContact.phone.replaceAll(/[^+\d]/g,'')}`}>Call or text {supportContact.phone}</a><p className="text-xs muted">Nova AI cannot confirm or perform payments. Human review is available through support tickets.</p></section>
 		</div>
 	</main></>;
 }

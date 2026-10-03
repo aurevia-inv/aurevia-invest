@@ -1,10 +1,11 @@
 import {NextResponse} from 'next/server';
-import {AccountMode,FundingStatus,FundingType,Prisma} from '@prisma/client';
+import {AccountMode,FundingStatus,FundingType,NotificationType,Prisma} from '@prisma/client';
 import {z,ZodError} from 'zod';
 import {requireAdmin} from '@/lib/auth';
 import {db} from '@/lib/db';
 import {ensureSystemAccount,ensureUserLedger,postDoubleEntry,balance} from '@/lib/ledger';
 import {jsonSafe} from '@/lib/serializers';
+import {createNotification} from '@/lib/notifications';
 
 const schema=z.object({id:z.string().min(1),decision:z.enum(['APPROVED','REJECTED']),note:z.string().trim().max(500).optional()});
 const pendingStatuses:FundingStatus[]=[FundingStatus.PENDING,FundingStatus.PENDING_REVIEW];
@@ -47,6 +48,9 @@ export async function PATCH(req:Request){
 			}
 			const updated=await tx.fundingRequest.findUniqueOrThrow({where:{id:current.id}});
 			await tx.auditLog.create({data:{actorId:admin.id,action:`FUNDING_${input.decision}`,entity:'FUNDING',entityId:updated.id,metadata:{type:updated.type,accountMode:updated.accountMode,currency:updated.currency,amount:updated.amount.toString()}}});
+			const notificationType=updated.type===FundingType.DEPOSIT?NotificationType.DEPOSIT:NotificationType.WITHDRAWAL;
+			const decisionLabel=input.decision==='APPROVED'?'approved':'rejected';
+			await createNotification(tx,{userId:updated.userId,type:notificationType,title:`${updated.type==='DEPOSIT'?'Deposit':'Withdrawal'} ${decisionLabel}`,message:updated.type==='DEPOSIT'&&input.decision==='APPROVED'&&updated.accountMode===AccountMode.REAL?'Your deposit was manually verified by an administrator and posted to your real-account ledger. This is not a blockchain confirmation.':updated.type==='DEPOSIT'&&input.decision==='APPROVED'?'Your demo deposit request was approved and posted to your demo ledger.':`Your ${updated.type.toLowerCase()} request was ${decisionLabel}.${input.note?` Admin note: ${input.note}`:''}`,dedupeKey:`funding:${updated.id}:${decisionLabel}`,relatedEntity:'FUNDING',relatedId:updated.id,actionUrl:`/wallet/transactions/${updated.id}`});
 			return updated;
 		},{isolationLevel:Prisma.TransactionIsolationLevel.Serializable});
 		return NextResponse.json(jsonSafe(request));

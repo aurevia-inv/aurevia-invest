@@ -1,5 +1,5 @@
 'use client';
-import {FormEvent,useState} from 'react';
+import {FormEvent,useEffect,useState} from 'react';
 import {signIn,useSession} from 'next-auth/react';
 import {useRouter} from 'next/navigation';
 import Link from 'next/link';
@@ -10,9 +10,12 @@ export default function Login(){
  const [identifier,setIdentifier]=useState('');
  const [password,setPassword]=useState('');
  const [error,setError]=useState('');
+ const [verified,setVerified]=useState(false);
  const [busy,setBusy]=useState(false);
  const router=useRouter();
  const {update}=useSession();
+
+ useEffect(()=>{setVerified(new URLSearchParams(window.location.search).get('verified')==='1')},[]);
 
  async function submit(event:FormEvent<HTMLFormElement>){
   event.preventDefault();
@@ -34,6 +37,7 @@ export default function Login(){
     <Image src="/aurevia-logo.png" alt="Aurevia Invest" width={58} height={58} className="mb-3"/>
   <h1 className="text-2xl font-bold">Sign in</h1>
   <p className="mt-1 muted">Access your Aurevia Invest account.</p>
+  {verified&&<p className="mt-4 text-sm text-profit" role="status">Your account is verified. Sign in to continue.</p>}
   <form onSubmit={submit} className="mt-6 space-y-4">
    <label className="block"><span className="mb-1 block text-sm">Email or administrator username</span><input className="input" name="identifier" type="text" autoComplete="username" value={identifier} onChange={event=>setIdentifier(event.target.value)} required/></label>
    <label className="block"><span className="mb-1 block text-sm">Password</span><input className="input" name="password" type="password" autoComplete="current-password" value={password} onChange={event=>setPassword(event.target.value)} required/></label>

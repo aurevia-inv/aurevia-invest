@@ -1,7 +1,9 @@
 import {NextAuthOptions} from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import bcrypt from 'bcryptjs';
+import {NotificationType} from '@prisma/client';
 import {db} from '@/lib/db';
+import {createNotification} from '@/lib/notifications';
 
 export const authOptions:NextAuthOptions={
   session:{strategy:'jwt',maxAge:8*60*60},
@@ -25,7 +27,7 @@ export const authOptions:NextAuthOptions={
       const lookupEmail=isAdminUsername ? adminEmail : email;
       if(!lookupEmail)return null;
       const u=await db.user.findUnique({where:{email:lookupEmail}});
-      if(!u||u.status!=='ACTIVE')return null;
+      if(!u||u.status!=='ACTIVE'||(u.role==='USER'&&u.requiresRegistrationVerification&&!u.verifiedAt))return null;
       const ok=await bcrypt.compare(password,u.passwordHash);
       if(!ok)return null;
       if(isAdminUsername&&u.role!=='ADMIN')return null;
@@ -43,5 +45,16 @@ export const authOptions:NextAuthOptions={
       return token;
     },
     async session({session,token}){if(session.user){session.user.id=String(token.id);session.user.role=token.role as 'USER'|'ADMIN';session.user.accountMode=token.accountMode as 'DEMO'|'REAL';}return session}
-  }
+  },
+  events:{
+    async signIn({user}){
+      if(!user.id)return;
+      const bucket=Math.floor(Date.now()/300_000);
+      try{
+        await createNotification(db,{userId:user.id,type:NotificationType.SECURITY,title:'New sign-in',message:'A successful sign-in to your Aurevia Invest account was recorded.',dedupeKey:`security:${user.id}:signin:${bucket}`,actionUrl:'/settings#security'});
+      }catch{
+        console.warn('Unable to persist sign-in notification.');
+      }
+    }
+  },
 };

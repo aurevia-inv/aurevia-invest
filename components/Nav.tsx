@@ -5,6 +5,7 @@ import {useSession,signOut} from 'next-auth/react';
 import {usePathname,useRouter} from 'next/navigation';
 import {LogOut,LayoutDashboard,LineChart,Wallet,ShieldCheck,Settings,Menu,X,UserRound,ArrowUpRight} from 'lucide-react';
 import {useEffect,useState} from 'react';
+import NotificationBell from '@/components/NotificationBell';
 
 export default function Nav(){
  const {data,status,update}=useSession(); const pathname=usePathname(); const router=useRouter(); const [open,setOpen]=useState(false); const [modeError,setModeError]=useState('');
@@ -31,6 +32,8 @@ export default function Nav(){
      <Link href="/wallet" onClick={close} aria-current={active('/wallet')?'page':undefined}><Wallet size={15} aria-hidden="true"/>Wallet</Link>
      <Link href="/kyc" onClick={close} aria-current={active('/kyc')?'page':undefined}><ShieldCheck size={15} aria-hidden="true"/>Verification</Link>
      <Link href="/settings" onClick={close} aria-current={active('/settings')?'page':undefined}><Settings size={15} aria-hidden="true"/>Settings</Link>
+    <Link href="/support" onClick={close} aria-current={active('/support')?'page':undefined}>Support</Link>
+    <NotificationBell/>
     {data.user.role==='ADMIN'&&<><Link href="/admin" onClick={close} aria-current={pathname==='/admin'?'page':undefined}>Admin</Link><Link href="/admin/payments" onClick={close} aria-current={active('/admin/payments')?'page':undefined}>Payments</Link><Link href="/admin/support" onClick={close} aria-current={active('/admin/support')?'page':undefined}>Support inbox</Link></>}
       <label className="mode-switch-wrap"><span className="sr-only">Account mode</span><select className="mode-switch" aria-label="Account mode" value={data.user.accountMode} onChange={event=>void changeMode(event.target.value as 'DEMO'|'REAL')}><option value="DEMO">DEMO</option><option value="REAL">REAL</option></select></label>
      <button type="button" className="nav-logout" onClick={()=>{close();void signOut({callbackUrl:'/login'});}}><LogOut size={15} aria-hidden="true"/>Logout</button>

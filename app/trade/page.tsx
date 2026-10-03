@@ -1,5 +1,6 @@
 "use client";
 import { FormEvent, useEffect, useState } from "react";
+import { useSession } from "next-auth/react";
 import Nav from "@/components/Nav";
 import { io } from "socket.io-client";
 import PriceChart from "@/components/PriceChart";
@@ -26,6 +27,7 @@ type Pos = {
   instrument: { symbol: string; price: number };
 };
 export default function Trade() {
+  const {data:session,status:sessionStatus}=useSession();
   const [items, setItems] = useState<I[]>([]);
   const updateStore = useTradingStore((s) => s.updatePrices);
   const [selected, setSelected] = useState("");
@@ -41,7 +43,13 @@ export default function Trade() {
   const [accountMode, setAccountMode] = useState<'DEMO'|'REAL'|'LOADING'>('LOADING');
   const [placing, setPlacing] = useState(false);
   useEffect(() => {
+    if(sessionStatus!=='authenticated')return;
     let active = true;
+    setAccountMode('LOADING');
+    setAvailableBalance(null);
+    setOrders([]);
+    setPositions([]);
+    setMsg('');
     const load = async () => {
       try {
         const responses = await Promise.all([
@@ -101,7 +109,7 @@ export default function Trade() {
       socket.off("market:update", onMarketUpdate);
       socket.disconnect();
     };
-  }, [updateStore]);
+  }, [updateStore,sessionStatus,session?.user?.accountMode]);
   useEffect(() => {
     if (!selected) return;
     const load = () =>

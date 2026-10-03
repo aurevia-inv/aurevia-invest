@@ -1,6 +1,7 @@
 import {db} from './db';
 import {balance,ensureSystemAccount,ensureUserLedger,postDoubleEntry} from './ledger';
-import {AccountMode,OrderSide,OrderStatus,OrderType,Prisma} from '@prisma/client';
+import {AccountMode,NotificationType,OrderSide,OrderStatus,OrderType,Prisma} from '@prisma/client';
+import {createNotification} from '@/lib/notifications';
 
 export type PlaceOrderInput={instrumentId:string;side:OrderSide;type:OrderType;quantity:number;price?:number;stopPrice?:number};
 
@@ -13,6 +14,7 @@ function executable(type:OrderType,side:OrderSide,market:number,price?:number,st
 export async function executeOrderTx(tx:Prisma.TransactionClient,orderId:string,fill:number){
  const order=await tx.order.findUnique({where:{id:orderId},include:{instrument:true}});
  if(!order||order.status!==OrderStatus.OPEN)throw new Error('ORDER_NOT_OPEN');
+ if(order.accountMode!==AccountMode.DEMO)throw new Error('REAL_EXECUTION_UNAVAILABLE');
  const qty=Number(order.quantity)-Number(order.filledQuantity); if(qty<=0)throw new Error('ORDER_FILLED');
  const leverage=Math.max(1,Number(order.instrument.leverage));
  const notional=new Prisma.Decimal(fill).mul(qty);
@@ -37,6 +39,7 @@ export async function executeOrderTx(tx:Prisma.TransactionClient,orderId:string,
  }else{
   await tx.position.create({data:{userId:order.userId,instrumentId:order.instrumentId,accountMode:order.accountMode,side:order.side,quantity:qty,entryPrice:fill,leverage:order.instrument.leverage,margin}});
  }
+ await createNotification(tx,{userId:order.userId,type:NotificationType.TRADE,title:'Demo order filled',message:`Your ${order.side.toLowerCase()} order for ${order.instrument.symbol} filled ${qty} at ${fill}. This was simulated trading.`,dedupeKey:`order:${order.id}:filled`,relatedEntity:'ORDER',relatedId:order.id,actionUrl:'/trade'});
  return tx.order.findUnique({where:{id:order.id},include:{executions:true,instrument:true}});
 }
 
@@ -49,17 +52,18 @@ export async function placeOrder(userId:string,accountMode:AccountMode,input:Pla
    const inst=await tx.instrument.findUnique({where:{id:input.instrumentId}}); if(!inst||!inst.enabled)throw new Error('INSTRUMENT_UNAVAILABLE');
    const market=Number(inst.price); const price=input.price===undefined?undefined:Number(input.price); const stop=input.stopPrice===undefined?undefined:Number(input.stopPrice);
   const order=await tx.order.create({data:{userId,instrumentId:inst.id,accountMode,side:input.side,type:input.type,quantity:input.quantity,price,stopPrice:stop,status:OrderStatus.OPEN}});
+  await createNotification(tx,{userId,type:NotificationType.TRADE,title:'Demo order submitted',message:`Your ${input.side.toLowerCase()} ${input.type.toLowerCase()} order for ${inst.symbol} was submitted in the simulated account.`,dedupeKey:`order:${order.id}:submitted`,relatedEntity:'ORDER',relatedId:order.id,actionUrl:'/trade'});
    if(!executable(input.type,input.side,market,price,stop))return order;
    return executeOrderTx(tx,order.id,market);
  },{isolationLevel:Prisma.TransactionIsolationLevel.Serializable});
 }
 
 export async function processOpenOrders(){
- const orders=await db.order.findMany({where:{status:OrderStatus.OPEN},include:{instrument:true},take:500,orderBy:{createdAt:'asc'}});
+ const orders=await db.order.findMany({where:{status:OrderStatus.OPEN,accountMode:AccountMode.DEMO},include:{instrument:true},take:500,orderBy:{createdAt:'asc'}});
  for(const o of orders){
    const p=Number(o.instrument.price); const hit=executable(o.type,o.side,p,o.price===null?undefined:Number(o.price),o.stopPrice===null?undefined:Number(o.stopPrice));
    if(!hit)continue;
    try{await db.$transaction(tx=>executeOrderTx(tx,o.id,p),{isolationLevel:Prisma.TransactionIsolationLevel.Serializable});}
-   catch(e){if(e instanceof Error&&['INSUFFICIENT_FUNDS','OPPOSITE_POSITION_MUST_BE_CLOSED_FIRST','ORDER_NOT_OPEN','ORDER_FILLED'].includes(e.message))await db.order.update({where:{id:o.id},data:{status:OrderStatus.REJECTED}});}
+  catch(e){if(e instanceof Error&&['INSUFFICIENT_FUNDS','OPPOSITE_POSITION_MUST_BE_CLOSED_FIRST','ORDER_NOT_OPEN','ORDER_FILLED'].includes(e.message))await db.$transaction(async tx=>{const rejected=await tx.order.updateMany({where:{id:o.id,status:OrderStatus.OPEN},data:{status:OrderStatus.REJECTED}});if(rejected.count)await createNotification(tx,{userId:o.userId,type:NotificationType.TRADE,title:'Demo order rejected',message:`Your ${o.side.toLowerCase()} order for ${o.instrument.symbol} was rejected in the simulated account.`,dedupeKey:`order:${o.id}:rejected`,relatedEntity:'ORDER',relatedId:o.id,actionUrl:'/trade'});});}
  }
 }
