@@ -8,15 +8,16 @@ export default function AdminLogin(){
  const [username,setUsername]=useState('');
  const [password,setPassword]=useState('');
  const [error,setError]=useState('');
+ const [replaceSession,setReplaceSession]=useState(false);
  const [busy,setBusy]=useState(false);
  const router=useRouter();
  async function submit(e:FormEvent){
    e.preventDefault();
    if(busy)return;
    setBusy(true); setError('');
-   const r=await signIn('credentials',{username,password,redirect:false,callbackUrl:'/admin'});
+  const r=await signIn('credentials',{username,password,replaceSession:String(replaceSession),redirect:false,callbackUrl:'/admin'});
    if(r?.ok) router.replace('/admin');
-   else {setError('Invalid administrator username or password.');setBusy(false);}
+  else {setError('Sign-in failed. Check your credentials and account status. Select session replacement only when you intend to end the current administrator session.');setBusy(false);}
  }
  return <main className="admin-login-scene min-h-screen px-4 py-10 sm:py-16">
    <div className="admin-orb admin-orb-a"/><div className="admin-orb admin-orb-b"/>
@@ -26,6 +27,7 @@ export default function AdminLogin(){
      <form onSubmit={submit} className="mt-7 space-y-4">
        <label className="block"><span className="mb-1 block text-xs font-semibold uppercase tracking-wider muted">Admin username</span><input className="input" type="text" autoComplete="username" required placeholder="Username" value={username} onChange={e=>setUsername(e.target.value)}/></label>
        <label className="block"><span className="mb-1 block text-xs font-semibold uppercase tracking-wider muted">Password</span><input className="input" type="password" autoComplete="current-password" required placeholder="Password" value={password} onChange={e=>setPassword(e.target.value)}/></label>
+        <label className="flex min-h-11 items-start gap-2 text-sm"><input className="mt-1" type="checkbox" checked={replaceSession} onChange={event=>setReplaceSession(event.target.checked)}/><span>Replace another active Aurevia session and sign it out.</span></label>
        {error&&<p className="text-loss text-sm" role="alert">{error}</p>}
        <button className="btn admin-login-button w-full bg-gold text-black" type="submit" disabled={busy}>{busy?'Authenticating…':'Enter control center'}</button>
      </form>

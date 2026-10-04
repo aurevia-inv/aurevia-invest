@@ -71,14 +71,13 @@ The 2FA control currently stores the account-security flag. A real deployment mu
 
 Copy `.env.example` to `.env`.
 
-Set the required values in your ignored `.env` file before starting the app:
+Set the values shown in `.env.example` in your ignored `.env` file. `DATABASE_URL` is the application connection (use the Supabase pooler URL when appropriate); Prisma uses `DIRECT_URL` for migrations and introspection. Both point to the existing Supabase Postgres database. The application does not use a Supabase client or service-role key; database access stays on the server through Prisma.
 
-- `DATABASE_URL` for the Postgres connection
-- `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD`
-- `NEXTAUTH_URL` and `NEXTAUTH_SECRET`
-- `NEXT_PUBLIC_APP_URL`
-- `ADMIN_USERNAME`, `ADMIN_EMAIL`, and `ADMIN_PASSWORD`
-- `MARKET_TICK_MS` and `PORT`
+`NEXT_PUBLIC_SUPABASE_URL` identifies the configured Supabase project and is not a database credential. The application does not send it to a browser-side Supabase client. Never add a Supabase service-role/secret key to a `NEXT_PUBLIC_` variable.
+
+`ADMIN_USERNAME`, `ADMIN_EMAIL`, and `ADMIN_PASSWORD` are used by the existing admin login and seed. Use a unique password of at least 12 characters. The seed updates the configured admin account, adopts an existing admin rather than creating another, and provisions an admin only when none exists.
+
+Registration can complete without a verification challenge when no delivery provider is configured. For email verification, configure `VERIFICATION_EMAIL_API_URL` and `VERIFICATION_EMAIL_API_KEY`. If `PHONE_VERIFICATION_REQUIRED=true`, configure `VERIFICATION_SMS_API_URL` and `VERIFICATION_SMS_API_KEY`; registration then requires a phone number. Keep provider credentials server-only. `NEXT_PUBLIC_APP_URL`, `PORT`, and `MARKET_TICK_MS` are optional and have runtime defaults.
 
 For a real deployment, use a unique high-entropy `NEXTAUTH_SECRET`, a strong administrator password, and managed secret storage.
 
@@ -87,6 +86,7 @@ For a real deployment, use a unique high-entropy `NEXTAUTH_SECRET`, a strong adm
 ```bash
 npm install
 cp .env.example .env
+# For the local Postgres container, set DATABASE_URL and DIRECT_URL to its connection URL.
 docker compose up -d postgres
 npx prisma generate
 npm run db:migrate
@@ -104,12 +104,12 @@ The application server owns the HTTP server and Socket.io endpoint, so use `npm 
 ## Administrator provisioning
 
 ```text
-Username: Press376
+Username: configured with ADMIN_USERNAME
 Email: configured with ADMIN_EMAIL
 Password: configured with ADMIN_PASSWORD
 ```
 
-Set `ADMIN_EMAIL` and a unique, strong `ADMIN_PASSWORD` in an ignored `.env` file or managed secret store, then run `npm run db:seed`. No administrator password is included in the repository. The seed refuses to run without these values.
+Set `ADMIN_USERNAME`, `ADMIN_EMAIL`, and a unique, strong `ADMIN_PASSWORD` in an ignored `.env` file or managed secret store, then run `npm run db:seed`. No administrator password is included in the repository. The seed refuses to run without these values.
 
 ## Docker
 
@@ -178,6 +178,8 @@ From `/admin`, test:
 - Approve/reject funding
 - Force-close positions
 - Enable/disable instruments
+
+Client stories are private drafts until an administrator links and verifies the client, records a completed REAL withdrawal with its settlement reference, records publication consent, and approves the story. The repository does not include the supplied story photos or a configured image-storage provider, so seeded drafts have no image reference. No story, financial amount, or verification badge is published by seeding.
 - Change system settings
 - Inspect audit logs
 

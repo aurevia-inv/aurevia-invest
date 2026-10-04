@@ -14,7 +14,9 @@ export async function GET(req:Request){
 	try{
 		await requireAdmin();
 		const includeHistory=new URL(req.url).searchParams.get('history')==='true';
-		const requests=await db.fundingRequest.findMany({where:includeHistory?undefined:{status:{in:pendingStatuses}},include:{user:{select:{email:true,name:true}},paymentMethod:{select:{name:true}}},orderBy:{createdAt:includeHistory?'desc':'asc'},take:includeHistory?200:undefined});
+		const settlementQueue=new URL(req.url).searchParams.get('settlement')==='true';
+		const where=settlementQueue?{type:FundingType.WITHDRAWAL,accountMode:AccountMode.REAL,status:FundingStatus.APPROVED,settlementReference:null}:includeHistory?undefined:{status:{in:pendingStatuses}};
+		const requests=await db.fundingRequest.findMany({where,include:{user:{select:{email:true,name:true}},paymentMethod:{select:{name:true}}},orderBy:{createdAt:includeHistory?'desc':'asc'},take:includeHistory?200:undefined});
 		return NextResponse.json(jsonSafe(requests));
 	}catch{
 		return NextResponse.json({error:'Forbidden'},{status:403});

@@ -1,5 +1,5 @@
 import {afterEach,describe,expect,it} from 'vitest';
-import {availableVerificationChannel,generateVerificationCode,hashVerificationCode,verificationCodeMatches} from '../lib/verification-delivery';
+import {availableVerificationChannel,generateVerificationCode,hashVerificationCode,registrationVerificationChannel,verificationCodeMatches} from '../lib/verification-delivery';
 
 describe('account verification codes',()=>{
  const previousSecret=process.env.VERIFICATION_CODE_SECRET;
@@ -37,4 +37,15 @@ describe('account verification codes',()=>{
   process.env.VERIFICATION_EMAIL_API_URL='https://user:password@mail.example.invalid/send';
   expect(availableVerificationChannel(null)).toBeNull();
  });
+
+    it('does not select SMS for registration unless phone verification is required',()=>{
+        process.env.VERIFICATION_SMS_API_KEY='test-only-key';
+        process.env.VERIFICATION_SMS_API_URL='https://sms.example.invalid/send';
+        expect(registrationVerificationChannel('+12125550123',false)).toBeNull();
+        expect(registrationVerificationChannel('+12125550123',true)).toBe('SMS');
+        expect(registrationVerificationChannel(null,true)).toBeNull();
+        process.env.VERIFICATION_EMAIL_API_KEY='test-only-key';
+        process.env.VERIFICATION_EMAIL_API_URL='https://mail.example.invalid/send';
+        expect(registrationVerificationChannel('+12125550123',false)).toBe('EMAIL');
+    });
 });

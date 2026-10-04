@@ -34,8 +34,9 @@ export async function POST(req:Request){
 		await db.$transaction(async tx=>{
 			const consumed=await tx.verificationCode.deleteMany({where:{id:challenge.id,codeHash:challenge.codeHash,attempts:{lt:verificationConfig.maxAttempts},expiresAt:{gt:now}}});
 			if(consumed.count!==1)throw new Error('VERIFICATION_CODE_CONSUMED');
-			await tx.user.update({where:{id:user.id},data:{verifiedAt:now,verifiedChannel:challenge.channel,requiresRegistrationVerification:false}});
-			await createNotification(tx,{userId:user.id,type:NotificationType.ACCOUNT,title:'Account verified',message:'Your Aurevia Invest account is verified and ready to use.',dedupeKey:`registration:${user.id}:verified`,actionUrl:'/dashboard'});
+			await tx.user.update({where:{id:user.id},data:{verifiedAt:now,verifiedChannel:challenge.channel,requiresRegistrationVerification:false,...(challenge.channel==='SMS'?{phoneVerified:true,phoneVerifiedAt:now}:{})}});
+			const phoneVerified=challenge.channel==='SMS';
+			await createNotification(tx,{userId:user.id,type:NotificationType.ACCOUNT,title:phoneVerified?'Phone number verified':'Email address verified',message:phoneVerified?'Your phone number was verified through the configured SMS provider.':'Your email address was verified through the configured email provider.',dedupeKey:`registration:${user.id}:verified:${challenge.channel.toLowerCase()}`,actionUrl:'/dashboard'});
 		});
 		return NextResponse.json({verified:true});
 	}catch(error){

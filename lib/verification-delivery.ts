@@ -31,6 +31,11 @@ export function availableVerificationChannel(phone:string|null){
 	return null;
 }
 
+export function registrationVerificationChannel(phone:string|null,phoneRequired=process.env.PHONE_VERIFICATION_REQUIRED==='true'){
+	if(phoneRequired)return phone&&provider(VerificationChannel.SMS)?VerificationChannel.SMS:null;
+	return provider(VerificationChannel.EMAIL)?VerificationChannel.EMAIL:null;
+}
+
 export function generateVerificationCode(){
 	return randomInt(100000,1000000).toString();
 }

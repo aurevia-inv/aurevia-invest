@@ -1,9 +1,10 @@
+import {registrationVerificationChannel,deliverVerificationCode,hasConfiguredVerificationProvider} from '@/lib/verification-delivery';
 import {NextResponse} from 'next/server';
 import {z,ZodError} from 'zod';
 import {db} from '@/lib/db';
 import {rateLimit} from '@/lib/rate-limit';
 import {verificationConfig} from '@/lib/config';
-import {generateVerificationCode,hashVerificationCode,availableVerificationChannel,deliverVerificationCode,hasConfiguredVerificationProvider} from '@/lib/verification-delivery';
+import {generateVerificationCode,hashVerificationCode} from '@/lib/verification-delivery';
 
 const schema=z.object({email:z.string().trim().email().max(254)});
 const genericResponse={message:'If the account is eligible and past the cooldown, a replacement code was requested. Delivery is not guaranteed.',resendAfterSeconds:verificationConfig.resendCooldownSeconds};
@@ -21,7 +22,7 @@ export async function POST(req:Request){
 		const challenge=await db.verificationCode.findUnique({where:{userId:user.id}});
 		const now=new Date();
 		if(challenge&&challenge.resendAfter>now)return NextResponse.json(genericResponse,{status:202});
-		const channel=availableVerificationChannel(user.phone);
+		const channel=registrationVerificationChannel(user.phone);
 		if(!channel)return NextResponse.json(genericResponse,{status:202});
 		const code=generateVerificationCode();
 		const codeHash=hashVerificationCode(user.id,code);

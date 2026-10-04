@@ -9,7 +9,7 @@ const viewports=[
 	{width:1440,height:900},
 ];
 
-const publicRoutes=['/','/login','/register','/markets','/about','/education','/support','/terms','/privacy','/risk-disclosure'];
+const publicRoutes=['/','/login','/register','/markets','/client-stories','/about','/education','/support','/terms','/privacy','/risk-disclosure'];
 const authenticatedRoutes=['/dashboard','/trade','/wallet','/wallet/transactions','/kyc','/settings','/support','/notifications'];
 const adminRoutes=['/admin/login','/admin','/admin/payments','/admin/support'];
 
@@ -27,7 +27,7 @@ test.describe('public routes and responsive layout',()=>{
 				const response=await page.goto(route);
 				expect(response?.status(),route).toBe(200);
 				await expect(page.locator('h1').first(),route).toBeVisible();
-				if(route==='/markets')await expect(page.getByRole('heading',{name:'LIVE MARKET ACTIVITY'})).toBeVisible();
+				if(route==='/markets')await expect(page.getByRole('heading',{name:'MARKET ACTIVITY'})).toBeVisible();
 				if(route==='/support')await expect(page.getByRole('heading',{name:'Nova AI',exact:true})).toBeVisible();
 				if(route==='/register'){
 					await expect(page.getByRole('radio',{name:/DEMO ACCOUNT/})).toBeVisible();
@@ -51,29 +51,103 @@ test('mobile navigation opens and navigates to Login',async({page})=>{
 	await expectNoHorizontalOverflow(page);
 });
 
+test('country selector searches Nigeria and United Kingdom and shows their dialing codes',async({page})=>{
+	await page.setViewportSize({width:320,height:800});
+	await page.goto('/register');
+	const picker=page.getByRole('button',{name:/phone country and dialing code/});
+	await expect(picker).toHaveAttribute('aria-label',/United States \+1/);
+	await picker.click();
+	const dialog=page.getByRole('dialog',{name:'Select phone country and dialing code'});
+	await expect(dialog).toBeVisible();
+	await expectNoHorizontalOverflow(page);
+	const search=dialog.getByRole('searchbox');
+	await search.fill('Nigeria');
+	const nigeria=dialog.getByRole('option',{name:/Nigeria.*NG.*\+234/});
+	await expect(nigeria).toBeVisible();
+	await search.press('ArrowDown');
+	await expect(nigeria).toBeFocused();
+	await page.keyboard.press('Enter');
+	await expect(picker).toHaveAttribute('aria-label',/Nigeria \+234/);
+	await picker.click();
+	const ukDialog=page.getByRole('dialog',{name:'Select phone country and dialing code'});
+	await ukDialog.getByRole('searchbox').fill('United Kingdom');
+	const uk=ukDialog.getByRole('option',{name:/United Kingdom.*GB.*\+44/});
+	await expect(uk).toBeVisible();
+	await uk.click();
+	await expect(picker).toHaveAttribute('aria-label',/United Kingdom \+44/);
+	await expectNoHorizontalOverflow(page);
+});
+
+test('mobile date entry is calendar-backed and future dates are blocked',async({page})=>{
+	await page.setViewportSize({width:320,height:800});
+	await page.goto('/register');
+	const date=page.getByLabel('Date of birth');
+	await expect(date).toHaveAttribute('type','date');
+	await expect(date).toHaveAttribute('max',new Date().toISOString().slice(0,10));
+	const future=new Date();future.setUTCDate(future.getUTCDate()+1);
+	const futureDate=future.toISOString().slice(0,10);
+	await date.fill(futureDate);
+	await expect(date).toHaveValue(futureDate);
+	const rejectsFuture=await date.evaluate((input:HTMLInputElement)=>input.validity.rangeOverflow);
+	expect(rejectsFuture).toBe(true);
+	await expectNoHorizontalOverflow(page);
+});
+
+test('sign-in password visibility, recovery link, and account link are accessible on mobile',async({page})=>{
+	await page.setViewportSize({width:320,height:800});
+	await page.goto('/login');
+	const password=page.getByLabel('Password');
+	await password.fill('ExamplePassword123');
+	await page.getByRole('button',{name:'Show password'}).click();
+	await expect(password).toHaveAttribute('type','text');
+	await page.getByRole('button',{name:'Hide password'}).click();
+	await expect(password).toHaveAttribute('type','password');
+	await expect(page.getByRole('link',{name:'Forgot password?'})).toHaveAttribute('href','/support');
+	await expect(page.getByRole('link',{name:'Create an account'})).toHaveAttribute('href','/register');
+	await expectNoHorizontalOverflow(page);
+});
+
 test('registration selects account mode, verifies through delivery, then login persists until logout',async({page})=>{
 	const email=fixture('REGISTRATION_EMAIL');
 	const password=fixture('REGISTRATION_PASSWORD');
+	await page.request.post('http://127.0.0.1:4311/reset');
 	await page.goto('/register');
 	await expect(page.getByRole('heading',{name:'Open an account'})).toBeVisible();
 	await expect(page.getByRole('radio',{name:/DEMO ACCOUNT/})).toBeVisible();
 	const realMode=page.getByRole('radio',{name:/REAL ACCOUNT/});
 	await realMode.check();
 	await expect(realMode).toBeChecked();
-	await page.getByLabel('Full name').fill('Temporary Browser Test');
-	await page.getByLabel('Email', {exact:true}).fill(email);
-	await page.getByLabel('Country').fill('Test');
-	await page.getByLabel('Phone (optional)').fill('+12105550199');
+	await page.getByLabel('First name').fill('Temporary');
+	await page.getByLabel('Last name').fill('Browser Test');
+	await page.getByLabel('Date of birth').fill('2000-02-29');
+	const residencePicker=page.getByRole('button',{name:/country of residence/});
+	await residencePicker.click();
+	const residenceDialog=page.getByRole('dialog',{name:'Select country of residence'});
+	await residenceDialog.getByRole('searchbox').fill('United States');
+	await residenceDialog.getByRole('option',{name:/United States.*US.*\+1/}).click();
+	const phonePicker=page.getByRole('button',{name:/phone country and dialing code/});
+	await phonePicker.click();
+	const phoneDialog=page.getByRole('dialog',{name:'Select phone country and dialing code'});
+	await phoneDialog.getByRole('searchbox').fill('United Kingdom');
+	await phoneDialog.getByRole('option',{name:/United Kingdom.*GB.*\+44/}).click();
+	await page.getByLabel('Email address').fill(email);
+	await page.getByLabel(/Phone number/).fill('07400 123456');
 	await page.getByLabel('Password', {exact:true}).fill(password);
+	await page.getByLabel('Confirm password').fill(password);
 	await page.getByRole('checkbox').check();
-	await page.getByRole('button',{name:'Continue to verification'}).click();
+	const registrationRequest=page.waitForRequest(request=>request.url().endsWith('/api/register')&&request.method()==='POST');
+	await page.getByRole('button',{name:'Create account'}).click();
+	const registrationPayload=(await registrationRequest).postDataJSON();
+	expect(registrationPayload).toMatchObject({name:'Temporary Browser Test',country:'United States',phone:'+447400123456',dateOfBirth:'2000-02-29'});
 	await expect(page.getByRole('heading',{name:'Verify your account'})).toBeVisible();
+	const providerStats=await page.request.get('http://127.0.0.1:4311/stats');
+	expect(await providerStats.json()).toMatchObject({email:1,sms:0});
 	const unverifiedLogin=await page.context().newPage();
 	await unverifiedLogin.goto('/login');
 	await unverifiedLogin.getByLabel('Email or administrator username').fill(email);
 	await unverifiedLogin.getByLabel('Password').fill(password);
 	await unverifiedLogin.getByRole('button',{name:'Sign in'}).click();
-	await expect(unverifiedLogin.getByText('Invalid credentials or inactive account.',{exact:true})).toBeVisible();
+	await expect(unverifiedLogin.getByText(/Sign-in failed/)).toBeVisible();
 	await unverifiedLogin.close();
 	const codeResponse=await page.request.get(`http://127.0.0.1:4311/test-code?email=${encodeURIComponent(email)}`);
 	expect(codeResponse.ok()).toBeTruthy();
@@ -90,6 +164,14 @@ test('registration selects account mode, verifies through delivery, then login p
 	await page.getByLabel('Password').fill(password);
 	await page.getByRole('button',{name:'Sign in'}).click();
 	await page.waitForURL(/dashboard/);
+	const profileResponse=await page.request.get('/api/profile');
+	expect(profileResponse.ok()).toBeTruthy();
+	const profile=await profileResponse.json();
+	expect(profile.phoneVerified).toBe(false);
+	expect(profile).not.toHaveProperty('dob');
+	expect(profile).not.toHaveProperty('dateOfBirth');
+	const kycResponse=await page.request.get('/api/kyc');
+	expect((await kycResponse.json()).dob).toBe('2000-02-29T00:00:00.000Z');
 	await page.goto('/');
 	await expect(page.getByRole('link',{name:/Dashboard/}).first()).toBeVisible();
 	await expect(page.getByRole('button',{name:/Notifications/})).toBeVisible();
@@ -107,6 +189,32 @@ test('legacy account without registration verification metadata can still sign i
 	await loginAs(page,fixture('LEGACY_USER_EMAIL'),fixture('LEGACY_USER_PASSWORD'));
 	await expect(page.getByRole('heading',{name:'Good to see you.'})).toBeVisible();
 	await expect(page.getByRole('button',{name:/Notifications/})).toBeVisible();
+});
+
+test('session replacement is explicit and refresh-safe',async({page,browser})=>{
+	const email=fixture('USER_EMAIL');
+	const password=fixture('USER_PASSWORD');
+	await page.goto('/login');
+	await page.getByLabel('Email or administrator username').fill(email);
+	await page.getByLabel('Password').fill(password);
+	await page.getByRole('button',{name:'Sign in'}).click();
+	await page.waitForURL(/dashboard/);
+	await page.reload();
+	await expect(page.getByRole('heading',{name:'Good to see you.'})).toBeVisible();
+	const otherContext=await browser.newContext();
+	try{
+		const otherDevice=await otherContext.newPage();
+		await otherDevice.goto('/login');
+		await otherDevice.getByLabel('Email or administrator username').fill(email);
+		await otherDevice.getByLabel('Password').fill(password);
+		await otherDevice.getByRole('button',{name:'Sign in'}).click();
+		await expect(otherDevice.getByText(/Sign-in failed/)).toBeVisible();
+		await otherDevice.getByRole('checkbox',{name:/Replace the active Aurevia session/}).check();
+		await otherDevice.getByRole('button',{name:'Sign in'}).click();
+		await otherDevice.waitForURL(/dashboard/);
+		await page.goto('/dashboard');
+		await expect(page).toHaveURL(/\/login/);
+	}finally{await otherContext.close();}
 });
 
 test('authenticated routes render at mobile, tablet, and desktop sizes',async({page})=>{
@@ -183,8 +291,8 @@ test('DEMO trading chart and order produce recorded simulated marketplace activi
 	await loginAs(page,fixture('USER_EMAIL'),fixture('USER_PASSWORD'));
 	const symbol=fixture('INSTRUMENT_B');
 	await page.goto('/markets');
-	await expect(page.getByRole('heading',{name:'LIVE MARKET ACTIVITY'})).toBeVisible();
-	await expect(page.getByText('Live connection')).toBeVisible();
+	await expect(page.getByRole('heading',{name:'MARKET ACTIVITY'})).toBeVisible();
+	await expect(page.getByText('Socket connected')).toBeVisible();
 	const marketPageUrl=page.url();
 	const socket=io('http://127.0.0.1:4310',{autoConnect:false,reconnection:false,timeout:5000});
 	const socketExecutions:Array<{symbol:string;side:string;accountMode:string}> = [];
@@ -256,6 +364,27 @@ test('Nova escalation reaches admin and admin response appears with notification
 	const ticket=page.getByRole('button').filter({hasText:subject});
 	await ticket.click();
 	await expect(page.getByText(reply)).toBeVisible();
+});
+
+test('administrator email sign-in persists through refresh and logout removes admin access',async({page})=>{
+	await page.goto('/admin/login');
+	await page.getByLabel('Admin username').fill(fixture('ADMIN_EMAIL'));
+	await page.getByLabel('Password').fill(fixture('ADMIN_PASSWORD'));
+	await page.getByRole('button',{name:'Enter control center'}).click();
+	await page.waitForURL(/\/admin$/);
+	await expect(page.getByRole('heading',{name:'Aurevia administration'})).toBeVisible();
+	await page.reload();
+	await expect(page.getByRole('heading',{name:'Aurevia administration'})).toBeVisible();
+	await page.getByRole('button',{name:'Logout'}).click();
+	await expect(page).toHaveURL(/\/login/);
+	await page.goto('/admin');
+	await expect(page).toHaveURL(/\/login/);
+});
+
+test('a normal customer cannot access the administrator dashboard',async({page})=>{
+	await loginAs(page,fixture('USER_EMAIL'),fixture('USER_PASSWORD'));
+	await page.goto('/admin');
+	await expect(page).toHaveURL(/\/login/);
 });
 
 test('admin pages render for authenticated administrator at requested viewports',async({page})=>{

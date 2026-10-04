@@ -4,8 +4,7 @@ import {generateVerificationCode,hashVerificationCode,availableVerificationChann
 
 type VerificationStore=Prisma.TransactionClient;
 
-export async function issueVerificationCode(tx:VerificationStore,user:{id:string;email:string;phone:string|null;name:string|null}){
-	const channel=availableVerificationChannel(user.phone);
+export async function issueVerificationCode(tx:VerificationStore,user:{id:string;email:string;phone:string|null;name:string|null},channel=availableVerificationChannel(user.phone)){
 	if(!channel)throw new Error('VERIFICATION_DELIVERY_UNAVAILABLE');
 	const code=generateVerificationCode();
 	const now=new Date();

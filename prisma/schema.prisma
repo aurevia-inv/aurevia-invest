@@ -5,6 +5,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 enum Role {
@@ -104,12 +105,25 @@ enum VerificationChannel {
   SMS
 }
 
+enum ClientStoryStatus {
+  DRAFT
+  PENDING_VERIFICATION
+  VERIFIED
+  PUBLISHED
+  REJECTED
+  ARCHIVED
+}
+
 model User {
   id String @id @default(cuid())
   email String @unique
   passwordHash String
   name String?
   phone String?
+  phoneVerified Boolean @default(false)
+  phoneVerifiedAt DateTime?
+  activeSessionId String? @unique
+  activeSessionUpdatedAt DateTime?
   country String?
   role Role @default(USER)
   accountMode AccountMode @default(DEMO)
@@ -132,6 +146,7 @@ model User {
   supportMessages SupportMessage[]
   notifications Notification[]
   verificationCode VerificationCode?
+  clientStories ClientStory[]
 }
 
 model Notification {
@@ -310,9 +325,13 @@ model FundingRequest {
   updatedAt DateTime @updatedAt
   reviewedAt DateTime?
   verifiedAt DateTime?
+  settlementReference String?
+  settledAt DateTime?
   supportConversations SupportConversation[]
+  clientStory ClientStory?
   @@index([status,createdAt])
   @@index([userId,accountMode,createdAt])
+  @@index([type,accountMode,status,createdAt])
 }
 model PaymentMethod {
   id String @id @default(cuid())
@@ -376,4 +395,31 @@ model AuditLog {
   metadata Json?
   createdAt DateTime @default(now())
   @@index([createdAt])
+}
+
+model ClientStory {
+  id String @id @default(cuid())
+  displayName String
+  country String
+  cityOrRegion String?
+  quote String
+  imageReference String?
+  userId String?
+  user User? @relation(fields:[userId],references:[id],onDelete:SetNull)
+  verifiedWithdrawalId String? @unique
+  withdrawal FundingRequest? @relation(fields:[verifiedWithdrawalId],references:[id],onDelete:SetNull)
+  withdrawalAmount Decimal? @db.Decimal(30,10)
+  currency String?
+  verifiedClient Boolean @default(false)
+  transactionVerified Boolean @default(false)
+  consentConfirmed Boolean @default(false)
+  showWithdrawalAmount Boolean @default(false)
+  displayCurrency String?
+  publicationStatus ClientStoryStatus @default(DRAFT)
+  source String?
+  adminNote String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([publicationStatus,createdAt])
+  @@index([userId])
 }

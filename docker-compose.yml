@@ -8,7 +8,7 @@ services:
     ports: ["${POSTGRES_PORT:-5432}:5432"]
     volumes: ["pgdata:/var/lib/postgresql/data"]
     healthcheck:
-      test: ["CMD-SHELL","pg_isready -U aurevia -d aurevia"]
+      test: ["CMD-SHELL","pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -19,9 +19,10 @@ services:
       NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?Set NEXTAUTH_SECRET in .env}
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
-      ADMIN_USERNAME: ${ADMIN_USERNAME:-Press376}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:?Set ADMIN_USERNAME in .env}
       ADMIN_EMAIL: ${ADMIN_EMAIL:?Set ADMIN_EMAIL in .env}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env}
+      DIRECT_URL: ${DIRECT_URL:?Set DIRECT_URL in .env}
     depends_on:
       postgres:
         condition: service_healthy

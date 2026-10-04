@@ -1,10 +1,11 @@
 'use client';
 
 import {FormEvent,useEffect,useState} from 'react';
+import {useSession} from 'next-auth/react';
 import {Bell,Check,KeyRound,ShieldCheck,UserRound} from 'lucide-react';
 import Nav from '@/components/Nav';
 
-type Profile={id:string;email:string;name:string|null;phone:string|null;country:string|null;twoFactorEnabled:boolean;role:'USER'|'ADMIN';status:string;kycStatus:string};
+type Profile={id:string;email:string;name:string|null;phone:string|null;phoneVerified:boolean;country:string|null;twoFactorEnabled:boolean;role:'USER'|'ADMIN';status:string;kycStatus:string};
 
 export default function Settings(){
 	const [profile,setProfile]=useState<Profile|null>(null);
@@ -13,6 +14,7 @@ export default function Settings(){
 	const [error,setError]=useState('');
 	const [loading,setLoading]=useState(true);
 	const [saving,setSaving]=useState(false);
+	const {data:session}=useSession();
 
 	useEffect(()=>{
 		let active=true;
@@ -53,6 +55,7 @@ export default function Settings(){
 						<label className="account-label md:col-span-2">Email address<input className="input" type="email" autoComplete="email" value={profile.email} disabled/></label>
 						<label className="account-label">Name<input className="input" autoComplete="name" required minLength={2} maxLength={120} value={profile.name||''} onChange={event=>setProfile({...profile,name:event.target.value})}/></label>
 						<label className="account-label">Phone<input className="input" type="tel" autoComplete="tel" maxLength={40} value={profile.phone||''} onChange={event=>setProfile({...profile,phone:event.target.value})}/></label>
+						<p className="muted text-xs">Phone verification: {profile.phoneVerified?'Verified through SMS':'Not verified'}</p>
 						<label className="account-label">Country<input className="input" autoComplete="country-name" required minLength={2} maxLength={80} value={profile.country||''} onChange={event=>setProfile({...profile,country:event.target.value})}/></label>
 						<div className="account-callout md:col-span-2"><ShieldCheck size={16}/><span>Verification status: <b>{verification}</b>. Review your details on the <a className="gold" href="/kyc">Verification page</a>.</span></div>
 						<div className="md:col-span-2"><button type="submit" className="btn bg-gold text-black" disabled={saving||loading}>{saving?'Saving…':'Save profile'}</button>{message&&<p className="mt-3 text-sm text-profit" role="status">{message}</p>}{error&&<p className="mt-3 text-sm text-loss" role="alert">{error}</p>}</div>
@@ -62,8 +65,8 @@ export default function Settings(){
 				{section==='security'&&<section className="account-panel card p-5" role="tabpanel"><div className="account-panel-title"><div><h2>Security overview</h2><p className="account-panel-subtitle">Review current account flags and session capabilities.</p></div><ShieldCheck size={18} className="gold" aria-hidden="true"/></div>
 					<div className="security-row"><span className="security-icon"><Check size={16}/></span><div><b>Password sign-in</b><p>Credential authentication is enabled for this account.</p></div><span className="status-pill">Enabled</span></div>
 					<div className="security-row"><span className="security-icon"><KeyRound size={16}/></span><div><b>Two-factor flag</b><p>This account field is a simulation only; no TOTP, WebAuthn, recovery codes, or second challenge is configured.</p></div><span className="status-pill">{profile?.twoFactorEnabled?'Flag on':'Not enabled'}</span></div>
-					<div className="security-row"><span className="security-icon"><UserRound size={16}/></span><div><b>Session management</b><p>Sessions are controlled by the secure sign-in cookie and server-side session configuration.</p></div><span className="status-pill">Current session</span></div>
-					<div className="account-callout mt-4"><Bell size={16}/><span>Notification controls and a session/device list are not enabled in this version.</span></div>
+					<div className="security-row"><span className="security-icon"><UserRound size={16}/></span><div><b>Current server session</b><p>Session ID: {session?.user.sessionId||'Loading'} · use Logout or explicitly replace this session during sign-in elsewhere.</p></div><span className="status-pill">One active session</span></div>
+					<div className="account-callout mt-4"><Bell size={16}/><span>Use the notification bell for recent alerts and the Notifications page for full history.</span></div>
 				</section>}
 				{section==='preferences'&&<section className="account-panel card p-5" role="tabpanel"><div className="account-panel-title"><div><h2>Preferences</h2><p className="account-panel-subtitle">More account controls will appear here when they are connected.</p></div><Bell size={18} className="gold" aria-hidden="true"/></div><div className="account-empty">Notification delivery and display preferences are not configured.</div></section>}
 			</div>

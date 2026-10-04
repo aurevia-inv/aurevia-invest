@@ -1,5 +1,6 @@
 import {NextAuthOptions} from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
+import {randomUUID} from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import {NotificationType} from '@prisma/client';
 import {db} from '@/lib/db';
@@ -14,15 +15,16 @@ export const authOptions:NextAuthOptions={
     credentials:{
       email:{label:'Email',type:'email'},
       username:{label:'Username',type:'text'},
-      password:{label:'Password',type:'password'}
+      password:{label:'Password',type:'password'},
+      replaceSession:{label:'Replace active session',type:'text'}
     },
     async authorize(c){
       const password=c?.password;
       if(!password)return null;
       const username=(c?.username||'').trim();
-      const email=(c?.email||'').trim().toLowerCase();
-      const adminUsername=(process.env.ADMIN_USERNAME||'Press376').trim();
-      const isAdminUsername=!!username&&username.toLowerCase()===adminUsername.toLowerCase();
+      const email=(c?.email||username).trim().toLowerCase();
+      const adminUsername=process.env.ADMIN_USERNAME?.trim();
+      const isAdminUsername=!!username&&!!adminUsername&&username.toLowerCase()===adminUsername.toLowerCase();
       const adminEmail=process.env.ADMIN_EMAIL?.trim().toLowerCase();
       const lookupEmail=isAdminUsername ? adminEmail : email;
       if(!lookupEmail)return null;
@@ -31,20 +33,24 @@ export const authOptions:NextAuthOptions={
       const ok=await bcrypt.compare(password,u.passwordHash);
       if(!ok)return null;
       if(isAdminUsername&&u.role!=='ADMIN')return null;
-      return {id:u.id,email:u.email,name:u.name,role:u.role,accountMode:u.accountMode};
+      if(u.activeSessionId&&c?.replaceSession!=='true')return null;
+      const sessionId=randomUUID();
+      const claimed=await db.user.updateMany({where:{id:u.id,activeSessionId:u.activeSessionId},data:{activeSessionId:sessionId,activeSessionUpdatedAt:new Date()}});
+      if(claimed.count!==1)return null;
+      return {id:u.id,email:u.email,name:u.name,role:u.role,accountMode:u.accountMode,sessionId};
     }
   })],
   callbacks:{
     async jwt({token,user}){
-      if(user){token.id=user.id;token.role=user.role;token.accountMode=user.accountMode;}
+      if(user){token.id=user.id;token.role=user.role;token.accountMode=user.accountMode;token.sessionId=user.sessionId;}
       if(token.id){
-        const current=await db.user.findUnique({where:{id:String(token.id)},select:{role:true,status:true,accountMode:true}});
-        if(!current||current.status!=='ACTIVE'){token.id='';token.role=undefined;token.accountMode=undefined;}
+        const current=await db.user.findUnique({where:{id:String(token.id)},select:{role:true,status:true,accountMode:true,activeSessionId:true}});
+        if(!current||current.status!=='ACTIVE'||(token.sessionId&&current.activeSessionId!==token.sessionId)){token.id='';token.role=undefined;token.accountMode=undefined;token.sessionId=undefined;}
         else{token.role=current.role;token.accountMode=current.accountMode;}
       }
       return token;
     },
-    async session({session,token}){if(session.user){session.user.id=String(token.id);session.user.role=token.role as 'USER'|'ADMIN';session.user.accountMode=token.accountMode as 'DEMO'|'REAL';}return session}
+    async session({session,token}){if(session.user){session.user.id=String(token.id);session.user.role=token.role as 'USER'|'ADMIN';session.user.accountMode=token.accountMode as 'DEMO'|'REAL';session.user.sessionId=typeof token.sessionId==='string'?token.sessionId.slice(0,8):'legacy';}return session}
   },
   events:{
     async signIn({user}){
@@ -55,6 +61,14 @@ export const authOptions:NextAuthOptions={
       }catch{
         console.warn('Unable to persist sign-in notification.');
       }
+    },
+    async signOut(message){
+      const token='token' in message?message.token:undefined;
+      const userId=token?.id||token?.sub;
+      const sessionId=typeof token?.sessionId==='string'?token.sessionId:null;
+      if(!userId||!sessionId)return;
+      try{await db.user.updateMany({where:{id:String(userId),activeSessionId:sessionId},data:{activeSessionId:null,activeSessionUpdatedAt:null}});}
+      catch{console.warn('Unable to clear the active account session.');}
     }
   },
 };
