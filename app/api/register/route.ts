@@ -10,6 +10,7 @@ import {registrationVerificationChannel,deliverVerificationCode} from '@/lib/ver
 import {verificationConfig} from '@/lib/config';
 import {NotificationType} from '@prisma/client';
 import {createNotification} from '@/lib/notifications';
+import {notifyActiveAdmins} from '@/lib/notifications';
 import {isValidE164,parseDateOfBirth} from '@/lib/registration-validation';
 
 const schema=z.object({
@@ -44,6 +45,7 @@ export async function POST(req:Request){
 			await ensureUserLedger(tx,created.id,p.accountMode);
 			await ensureSystemAccount(tx,'SYSTEM:LIABILITY','Customer Funds');
 			await createNotification(tx,{userId:created.id,type:NotificationType.ACCOUNT,title:'Account registration received',message:channel?'Complete the configured contact verification to finish registration.':'Your account is ready for sign-in. Phone verification is not enabled.',dedupeKey:`registration:${created.id}:created`,actionUrl:channel?'/register':'/dashboard'});
+			await notifyActiveAdmins(tx,{type:NotificationType.ACCOUNT,title:'New account registration',message:`A new ${created.accountMode.toLowerCase()} account registration is awaiting review.`,dedupeKey:`registration:${created.id}:admin`,relatedEntity:'USER',relatedId:created.id,actionUrl:'/admin'});
 			const challenge=channel?await issueVerificationCode(tx,created,channel):null;
 			return {user:created,challenge};
 		});
@@ -60,7 +62,6 @@ export async function POST(req:Request){
 			if(error.issues.some(issue=>issue.path[0]==='phone'))return NextResponse.json({error:'Enter a valid phone number with its country code.'},{status:400});
 			return NextResponse.json({error:'Check your name, email, country, password, and consent details.'},{status:400});
 		}
-		if(error instanceof Prisma.PrismaClientKnownRequestError&&error.code==='P2002')return NextResponse.json({message:'If this account can be created, verification instructions have been sent.',resendAfterSeconds:verificationConfig.resendCooldownSeconds},{status:202});
 		if(error instanceof Prisma.PrismaClientKnownRequestError&&error.code==='P2002'){
 			const target=error.meta?.target;
 			const fields=Array.isArray(target)?target.map(String):[String(target||'')];

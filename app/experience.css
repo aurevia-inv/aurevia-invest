@@ -31,6 +31,7 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,su
 .nav-links .nav-cta{padding-inline:15px;background:var(--a-brass)!important;color:#11150f!important}
 .nav-links .nav-logout{color:#dfb4aa!important}
 .menu-button{width:44px;height:44px;border:1px solid var(--a-line);border-radius:6px;align-items:center;justify-content:center}
+.nav-actions{position:relative;z-index:66;display:flex;align-items:center;gap:8px;margin-left:12px}
 .menu-button svg{width:20px;height:20px}
 .nav-dropdown{z-index:2}
 .dropdown-panel{border-color:var(--a-line);border-radius:6px;background:#101b15}

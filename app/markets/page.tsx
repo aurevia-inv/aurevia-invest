@@ -1,5 +1,6 @@
-import MarketExperience from '@/components/MarketExperience';
+import './market-dashboard.css';
+import LiveMarketDashboard from '@/components/LiveMarketDashboard';
 
 export default function Markets(){
-  return <MarketExperience/>;
+  return <LiveMarketDashboard/>;
 }

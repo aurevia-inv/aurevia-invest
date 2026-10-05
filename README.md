@@ -1,6 +1,6 @@
 # Aurevia Invest
 
-Aurevia Invest is a Next.js 14 application using TypeScript, PostgreSQL, Prisma, NextAuth, Socket.IO, Zustand, Tailwind CSS and Recharts. Trading and market prices are internal simulations; this repository does not connect to a live broker, exchange, bank, or payment network.
+Aurevia Invest is a Next.js 14 application using TypeScript, PostgreSQL, Prisma, NextAuth, Socket.IO, Zustand, Tailwind CSS, Recharts and Lightweight Charts. Trading and market prices used by the trading engine remain internal simulations; the `/markets` dashboard separately displays live-provider quotes and history. This repository does not connect to a live broker, exchange, bank, or payment network.
 
 ## What is implemented
 
@@ -55,6 +55,10 @@ Aurevia Invest is a Next.js 14 application using TypeScript, PostgreSQL, Prisma,
 - Socket.io trade:update events
 - REST market, candle and order-book endpoints
 
+### Live market dashboard
+
+The `/markets` page uses Yahoo Finance's unofficial chart endpoint through same-origin Next.js API routes. It requires no API key or new environment variable. Quotes refresh every five seconds for the selected asset; watchlist quotes refresh every 30 seconds, and server-side in-process caching reduces duplicate provider requests. Historical OHLCV data supports the displayed ranges and is cached for up to one minute. Yahoo Finance is not an official API and can delay, limit, or discontinue access; provider errors are shown in the dashboard rather than replaced with simulated prices. The ticker and chart are informational and are not connected to trade execution.
+
 ## Important scope boundary
 
 The platform's funding and market environment is intentionally internal simulation. `BANK_SIM`, `CRYPTO_SIM`, and `INTERNAL_TRANSFER` are not bank, card, blockchain, custody, or exchange integrations. Connecting real customer money or external execution requires regulated providers, KYC/AML/sanctions controls, reconciliation, custody, licensing, security review and jurisdiction-specific compliance.
@@ -78,6 +82,12 @@ Set the values shown in `.env.example` in your ignored `.env` file. `DATABASE_UR
 `ADMIN_USERNAME`, `ADMIN_EMAIL`, and `ADMIN_PASSWORD` are used by the existing admin login and seed. Use a unique password of at least 12 characters. The seed updates the configured admin account, adopts an existing admin rather than creating another, and provisions an admin only when none exists.
 
 Registration can complete without a verification challenge when no delivery provider is configured. For email verification, configure `VERIFICATION_EMAIL_API_URL` and `VERIFICATION_EMAIL_API_KEY`. If `PHONE_VERIFICATION_REQUIRED=true`, configure `VERIFICATION_SMS_API_URL` and `VERIFICATION_SMS_API_KEY`; registration then requires a phone number. Keep provider credentials server-only. `NEXT_PUBLIC_APP_URL`, `PORT`, and `MARKET_TICK_MS` are optional and have runtime defaults.
+
+For production, set `NEXTAUTH_URL` and `NEXT_PUBLIC_APP_URL` to the canonical HTTPS domain configured for that deployment. Production startup rejects a missing `NEXTAUTH_SECRET` or `NEXTAUTH_URL`; it never trusts an arbitrary Host header to establish the auth origin. Configure `SUPPORT_EMAIL` and `COMPLAINTS_EMAIL` separately from `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, and `SMTP_FROM`. When SMTP is missing, password recovery is unavailable and support/funding actions report that no email was sent; in-app tickets and notifications remain recorded.
+
+Private receipt, support attachment, and profile avatar uploads require a private Supabase Storage bucket named by `SUPABASE_PRIVATE_BUCKET` (default `aurevia-private`), `SUPABASE_URL` (or the existing project URL), and server-only `SUPABASE_SERVICE_ROLE_KEY`. Never use a public bucket or expose that key to a browser. Upload APIs validate file signatures and size, store opaque keys in Postgres, and return only short-lived signed URLs after owner/admin checks. Apply Storage policies appropriate to the trusted server service-role model and keep the bucket private.
+
+Password recovery tokens are random, single-use, expire after 30 minutes, and are stored only as SHA-256 hashes. Resetting a password revokes the active account session. Successful and failed credential attempts are written to the existing admin-only audit log with a validated IP when available, bounded user-agent text, and a hashed identifier for unknown accounts; no password or raw token is stored.
 
 For a real deployment, use a unique high-entropy `NEXTAUTH_SECRET`, a strong administrator password, and managed secret storage.
 

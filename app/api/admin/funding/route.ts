@@ -6,6 +6,7 @@ import {db} from '@/lib/db';
 import {ensureSystemAccount,ensureUserLedger,postDoubleEntry,balance} from '@/lib/ledger';
 import {jsonSafe} from '@/lib/serializers';
 import {createNotification} from '@/lib/notifications';
+import {sendSupportEmail} from '@/lib/email';
 
 const schema=z.object({id:z.string().min(1),decision:z.enum(['APPROVED','REJECTED']),note:z.string().trim().max(500).optional()});
 const pendingStatuses:FundingStatus[]=[FundingStatus.PENDING,FundingStatus.PENDING_REVIEW];
@@ -17,7 +18,8 @@ export async function GET(req:Request){
 		const settlementQueue=new URL(req.url).searchParams.get('settlement')==='true';
 		const where=settlementQueue?{type:FundingType.WITHDRAWAL,accountMode:AccountMode.REAL,status:FundingStatus.APPROVED,settlementReference:null}:includeHistory?undefined:{status:{in:pendingStatuses}};
 		const requests=await db.fundingRequest.findMany({where,include:{user:{select:{email:true,name:true}},paymentMethod:{select:{name:true}}},orderBy:{createdAt:includeHistory?'desc':'asc'},take:includeHistory?200:undefined});
-		return NextResponse.json(jsonSafe(requests));
+		const safeRequests=requests.map(({receiptKey,...request})=>({...request,hasReceipt:!!receiptKey}));
+		return NextResponse.json(jsonSafe(safeRequests),{headers:{'Cache-Control':'private, no-store'}});
 	}catch{
 		return NextResponse.json({error:'Forbidden'},{status:403});
 	}
@@ -55,7 +57,10 @@ export async function PATCH(req:Request){
 			await createNotification(tx,{userId:updated.userId,type:notificationType,title:`${updated.type==='DEPOSIT'?'Deposit':'Withdrawal'} ${decisionLabel}`,message:updated.type==='DEPOSIT'&&input.decision==='APPROVED'&&updated.accountMode===AccountMode.REAL?'Your deposit was manually verified by an administrator and posted to your real-account ledger. This is not a blockchain confirmation.':updated.type==='DEPOSIT'&&input.decision==='APPROVED'?'Your demo deposit request was approved and posted to your demo ledger.':`Your ${updated.type.toLowerCase()} request was ${decisionLabel}.${input.note?` Admin note: ${input.note}`:''}`,dedupeKey:`funding:${updated.id}:${decisionLabel}`,relatedEntity:'FUNDING',relatedId:updated.id,actionUrl:`/wallet/transactions/${updated.id}`});
 			return updated;
 		},{isolationLevel:Prisma.TransactionIsolationLevel.Serializable});
-		return NextResponse.json(jsonSafe(request));
+		const user=await db.user.findUnique({where:{id:request.userId},select:{email:true}});
+		const delivery=user?await sendSupportEmail(`Funding request ${input.decision.toLowerCase()}`,[`Request: ${request.id}`,`User: ${request.userId}`,`Type: ${request.type}`,`Mode: ${request.accountMode}`,`Status: ${request.status}`,`A ledger entry was posted only if the approved review transaction completed.`].join('\n')):{sent:false as const,reason:'failed' as const};
+		const {receiptKey,...safeRequest}=request;
+		return NextResponse.json({...jsonSafe(safeRequest),hasReceipt:!!receiptKey,emailDelivery:delivery.sent?'sent':delivery.reason||'failed'},{headers:{'Cache-Control':'private, no-store'}});
 	}catch(error){
 		if(error instanceof ZodError)return NextResponse.json({error:'Invalid review details.'},{status:400});
 		if(error instanceof Error&&['FUNDING_NOT_PENDING','FUNDING_ALREADY_REVIEWED','INSUFFICIENT_FUNDS','REAL_KYC_REQUIRED'].includes(error.message))return NextResponse.json({error:error.message.replaceAll('_',' ').toLowerCase()},{status:409});

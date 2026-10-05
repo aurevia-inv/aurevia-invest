@@ -1,7 +1,10 @@
-export const supportContact={
-	email:'nftsinvestmentplc@gmail.com',
-	phone:'+1 (210) 728-6277',
-} as const;
+export function getSupportContact(){
+	return {
+		email:process.env.SUPPORT_EMAIL?.trim()||'',
+		complaintsEmail:process.env.COMPLAINTS_EMAIL?.trim()||'',
+		phone:process.env.SUPPORT_PHONE?.trim()||'',
+	};
+}
 
 export const verificationConfig={
 	expiresInMinutes:10,

@@ -24,7 +24,8 @@ export async function POST(req:Request){
 			await createNotification(tx,{userId:updated.userId,type:NotificationType.WITHDRAWAL,title:'Withdrawal settlement recorded',message:`Your real-account withdrawal was marked settled by an administrator. Reference: ${input.settlementReference}.`,dedupeKey:`funding:${updated.id}:settled`,relatedEntity:'FUNDING',relatedId:updated.id,actionUrl:`/wallet/transactions/${updated.id}`});
 			return updated;
 		},{isolationLevel:Prisma.TransactionIsolationLevel.Serializable});
-		return NextResponse.json(jsonSafe({request}));
+		const {receiptKey,...safeRequest}=request;
+		return NextResponse.json(jsonSafe({request:{...safeRequest,hasReceipt:!!receiptKey}}),{headers:{'Cache-Control':'private, no-store'}});
 	}catch(error){
 		if(error instanceof ZodError)return NextResponse.json({error:'Enter a valid settlement reference and note.'},{status:400});
 		if(error instanceof Error&&error.message==='UNAUTHORIZED')return NextResponse.json({error:'Unauthorized'},{status:401});

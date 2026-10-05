@@ -1,6 +1,6 @@
 'use client';
 import {FormEvent,useState} from 'react';
-import {signIn} from 'next-auth/react';
+import {signIn,useSession} from 'next-auth/react';
 import {useRouter} from 'next/navigation';
 import Image from 'next/image';
 
@@ -11,13 +11,17 @@ export default function AdminLogin(){
  const [replaceSession,setReplaceSession]=useState(false);
  const [busy,setBusy]=useState(false);
  const router=useRouter();
+ const {update}=useSession();
  async function submit(e:FormEvent){
    e.preventDefault();
    if(busy)return;
    setBusy(true); setError('');
-  const r=await signIn('credentials',{username,password,replaceSession:String(replaceSession),redirect:false,callbackUrl:'/admin'});
-   if(r?.ok) router.replace('/admin');
-  else {setError('Sign-in failed. Check your credentials and account status. Select session replacement only when you intend to end the current administrator session.');setBusy(false);}
+   try{
+    const result=await signIn('credentials',{username,password,replaceSession:String(replaceSession),redirect:false,callbackUrl:'/admin'});
+    if(result?.ok){await update();router.replace('/admin');router.refresh();}
+    else setError('Sign-in failed. Check your credentials and account status. Select session replacement only when you intend to end the current administrator session.');
+   }catch{setError('Unable to reach the authentication service. Please try again.')}
+   finally{setBusy(false)}
  }
  return <main className="admin-login-scene min-h-screen px-4 py-10 sm:py-16">
    <div className="admin-orb admin-orb-a"/><div className="admin-orb admin-orb-b"/>

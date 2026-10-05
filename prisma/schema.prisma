@@ -89,6 +89,15 @@ enum SupportAuthor {
   NOVA
 }
 
+enum SupportCategory {
+  GENERAL
+  FUNDING
+  WITHDRAWAL
+  ACCOUNT
+  SECURITY
+  COMPLAINT
+}
+
 enum NotificationType {
   ACCOUNT
   SECURITY
@@ -147,7 +156,9 @@ model User {
   supportMessages SupportMessage[]
   notifications Notification[]
   verificationCode VerificationCode?
+  passwordResetTokens PasswordResetToken[]
   clientStories ClientStory[]
+  avatarKey String?
 }
 
 model Notification {
@@ -178,6 +189,18 @@ model VerificationCode {
   attempts Int @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  @@index([expiresAt])
+}
+
+model PasswordResetToken {
+  id String @id @default(cuid())
+  userId String
+  user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+  tokenHash String @unique
+  expiresAt DateTime
+  consumedAt DateTime?
+  createdAt DateTime @default(now())
+  @@index([userId,createdAt])
   @@index([expiresAt])
 }
 model KycProfile {
@@ -328,6 +351,7 @@ model FundingRequest {
   verifiedAt DateTime?
   settlementReference String?
   settledAt DateTime?
+  receiptKey String?
   supportConversations SupportConversation[]
   clientStory ClientStory?
   @@index([status,createdAt])
@@ -360,6 +384,9 @@ model SupportConversation {
   user User @relation(fields:[userId],references:[id],onDelete:Cascade)
   accountMode AccountMode @default(DEMO)
   subject String
+  category SupportCategory @default(GENERAL)
+  isComplaint Boolean @default(false)
+  attachmentKey String?
   status SupportStatus @default(AWAITING_ADMIN)
   transactionId String?
   transaction FundingRequest? @relation(fields:[transactionId],references:[id],onDelete:SetNull)

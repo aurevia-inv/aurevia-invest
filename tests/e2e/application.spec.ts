@@ -27,7 +27,7 @@ test.describe('public routes and responsive layout',()=>{
 				const response=await page.goto(route);
 				expect(response?.status(),route).toBe(200);
 				await expect(page.locator('h1').first(),route).toBeVisible();
-				if(route==='/markets')await expect(page.getByRole('heading',{name:'MARKET ACTIVITY'})).toBeVisible();
+				if(route==='/markets')await expect(page.getByRole('heading',{name:'Mercados',exact:true})).toBeVisible();
 				if(route==='/support')await expect(page.getByRole('heading',{name:'Nova AI',exact:true})).toBeVisible();
 				if(route==='/register'){
 					await expect(page.getByRole('radio',{name:/DEMO ACCOUNT/})).toBeVisible();
@@ -342,12 +342,14 @@ test('Nova escalation reaches admin and admin response appears with notification
 	await loginAs(page,fixture('USER_EMAIL'),fixture('USER_PASSWORD'));
 	await page.goto('/support');
 	await expect(page.getByRole('heading',{name:'Nova AI',exact:true})).toBeVisible();
-	await expect(page.getByRole('link',{name:/nftsinvestmentplc@gmail.com/})).toBeVisible();
+	const supportContact=await fetch(`${process.env.NEXT_PUBLIC_APP_URL||'http://127.0.0.1:4310'}/api/support/contact`).then(response=>response.json());
+	if(supportContact.email)await expect(page.getByRole('link',{name:new RegExp(supportContact.email.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'))})).toBeVisible();
+	else await expect(page.getByText('Direct email is not configured. Authenticated support tickets remain available.')).toBeVisible();
 	await page.getByRole('button',{name:'Contact Admin'}).click();
 	await page.getByLabel('Subject').fill(subject);
 	await page.getByLabel('Message').fill('Please review this disposable browser test ticket.');
 	await page.getByRole('button',{name:'Create support ticket'}).click();
-	await expect(page.getByRole('status')).toContainText(/sent to the admin inbox/i);
+	await expect(page.getByRole('status')).toContainText(/created\./i);
 	await page.getByRole('button',{name:'Logout'}).click();
 	await expect(page).toHaveURL(/\/login/);
 	await loginAs(page,fixture('ADMIN_EMAIL'),fixture('ADMIN_PASSWORD'));

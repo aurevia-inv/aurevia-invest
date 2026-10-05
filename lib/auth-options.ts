@@ -1,10 +1,25 @@
 import {NextAuthOptions} from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
-import {randomUUID} from 'node:crypto';
+import {createHash,randomUUID} from 'node:crypto';
+import {isIP} from 'node:net';
+import type {IncomingHttpHeaders} from 'node:http';
 import bcrypt from 'bcryptjs';
 import {NotificationType} from '@prisma/client';
 import {db} from '@/lib/db';
 import {createNotification} from '@/lib/notifications';
+import {rateLimit} from '@/lib/rate-limit';
+
+function headerValue(value:string|string[]|undefined){return Array.isArray(value)?value[0]||'':value||''}
+function auditClientIp(headers:IncomingHttpHeaders){
+  const forwarded=headerValue(headers['x-forwarded-for']).split(',')[0]?.trim();
+  const real=headerValue(headers['x-real-ip']).trim();
+  const candidate=forwarded&&isIP(forwarded)?forwarded:real&&isIP(real)?real:'';
+  return candidate||null;
+}
+function safeAuditError(error:unknown){
+  const code=error&&typeof error==='object'&&'code' in error?String(error.code):'';
+  return /^[A-Z0-9_]{2,32}$/.test(code)?code:error instanceof Error?error.name:'UnknownError';
+}
 
 export const authOptions:NextAuthOptions={
   session:{strategy:'jwt',maxAge:8*60*60},
@@ -18,25 +33,45 @@ export const authOptions:NextAuthOptions={
       password:{label:'Password',type:'password'},
       replaceSession:{label:'Replace active session',type:'text'}
     },
-    async authorize(c){
+    async authorize(c,request){
       const password=c?.password;
       if(!password)return null;
       const username=(c?.username||'').trim();
       const email=(c?.email||username).trim().toLowerCase();
+      const headers=request.headers as IncomingHttpHeaders|undefined;
+      const ipAddress=headers?auditClientIp(headers):null;
+      const userAgent=(headers?headerValue(headers['user-agent']):'').replace(/[\u0000-\u001f\u007f]/g,'').slice(0,500)||null;
+      const identifierHash=createHash('sha256').update(email||username||'unknown').digest('hex');
+      const writeLoginAudit=async(status:'SUCCESS'|'FAILED',userId?:string,sessionId?:string,reason?:string)=>{
+        try{
+          await db.auditLog.create({data:{
+            actorId:userId||null,
+            action:`LOGIN_${status}`,
+            entity:'LOGIN',
+            entityId:userId||identifierHash,
+            metadata:{status,authMethod:'credentials',clientIp:ipAddress,userAgent,sessionRef:sessionId?createHash('sha256').update(sessionId).digest('hex').slice(0,24):null,reason:reason||null},
+          }});
+        }catch(error){console.warn(`Login audit write failed (${safeAuditError(error)}).`)}
+      };
+      try{rateLimit(`credential-login:${ipAddress||'unknown'}`,20,15*60_000)}catch{await writeLoginAudit('FAILED',undefined,undefined,'RATE_LIMITED');return null}
       const adminUsername=process.env.ADMIN_USERNAME?.trim();
       const isAdminUsername=!!username&&!!adminUsername&&username.toLowerCase()===adminUsername.toLowerCase();
       const adminEmail=process.env.ADMIN_EMAIL?.trim().toLowerCase();
       const lookupEmail=isAdminUsername ? adminEmail : email;
-      if(!lookupEmail)return null;
+      if(!lookupEmail){await writeLoginAudit('FAILED',undefined,undefined,'MISSING_IDENTIFIER');return null;}
       const u=await db.user.findUnique({where:{email:lookupEmail}});
-      if(!u||u.status!=='ACTIVE'||(u.role==='USER'&&u.requiresRegistrationVerification&&!u.verifiedAt))return null;
+      if(!u||u.status!=='ACTIVE'||(u.role==='USER'&&u.requiresRegistrationVerification&&!u.verifiedAt)){
+        await writeLoginAudit('FAILED',u?.id,undefined,!u?'ACCOUNT_NOT_FOUND':u.status!=='ACTIVE'?'ACCOUNT_INACTIVE':'VERIFICATION_REQUIRED');
+        return null;
+      }
       const ok=await bcrypt.compare(password,u.passwordHash);
-      if(!ok)return null;
-      if(isAdminUsername&&u.role!=='ADMIN')return null;
-      if(u.activeSessionId&&c?.replaceSession!=='true')return null;
+      if(!ok){await writeLoginAudit('FAILED',u.id,undefined,'INVALID_CREDENTIALS');return null;}
+      if(isAdminUsername&&u.role!=='ADMIN'){await writeLoginAudit('FAILED',u.id,undefined,'ADMIN_ROLE_REQUIRED');return null;}
+      if(u.activeSessionId&&c?.replaceSession!=='true'){await writeLoginAudit('FAILED',u.id,undefined,'ACTIVE_SESSION_REPLACEMENT_REQUIRED');return null;}
       const sessionId=randomUUID();
       const claimed=await db.user.updateMany({where:{id:u.id,activeSessionId:u.activeSessionId},data:{activeSessionId:sessionId,activeSessionUpdatedAt:new Date()}});
-      if(claimed.count!==1)return null;
+      if(claimed.count!==1){await writeLoginAudit('FAILED',u.id,undefined,'SESSION_CLAIM_FAILED');return null;}
+      await writeLoginAudit('SUCCESS',u.id,sessionId);
       return {id:u.id,email:u.email,name:u.name,role:u.role,accountMode:u.accountMode,sessionId};
     }
   })],

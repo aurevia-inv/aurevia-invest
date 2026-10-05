@@ -18,3 +18,8 @@ export async function createNotification(tx:NotificationStore,input:{
 		create:input,
 	});
 }
+
+export async function notifyActiveAdmins(tx:NotificationStore,input:Omit<Parameters<typeof createNotification>[1],'userId'|'dedupeKey'> & {dedupeKey:string}){
+	const admins=await tx.user.findMany({where:{role:'ADMIN',status:'ACTIVE'},select:{id:true}});
+	return Promise.all(admins.map(admin=>createNotification(tx,{...input,userId:admin.id,dedupeKey:`admin:${admin.id}:${input.dedupeKey}`})));
+}

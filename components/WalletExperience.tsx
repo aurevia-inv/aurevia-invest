@@ -7,7 +7,7 @@ import {ArrowDownLeft,ArrowUpRight,Check,Copy,RefreshCw,WalletCards} from 'lucid
 import Nav from '@/components/Nav';
 
 type PaymentMethod={id:string;name:string;currencies:string[];destination:string|null;instructions:string|null;minimumAmount:string|number;maximumAmount:string|number|null;depositEnabled:boolean;withdrawalEnabled:boolean;requiresNetwork:boolean;demoOnly:boolean};
-type FundingRecord={id:string;type:'DEPOSIT'|'WITHDRAWAL';method:string;amount:number|string;currency:string;status:string;accountMode:'DEMO'|'REAL';createdAt:string;transactionReference?:string|null;adminNote?:string|null};
+type FundingRecord={id:string;type:'DEPOSIT'|'WITHDRAWAL';method:string;amount:number|string;currency:string;status:string;accountMode:'DEMO'|'REAL';createdAt:string;transactionReference?:string|null;adminNote?:string|null;hasReceipt?:boolean};
 type WalletData={accountMode:'DEMO'|'REAL';balance:number|string;balances:Array<{currency:string;balance:number|string}>;transactions:FundingRecord[]};
 type KycData={kycStatus:string};
 
@@ -40,6 +40,8 @@ export default function WalletExperience(){
 	const [copied,setCopied]=useState(false);
 	const [idempotencyKey,setIdempotencyKey]=useState('');
 	const [keyFingerprint,setKeyFingerprint]=useState('');
+	const [receiptFiles,setReceiptFiles]=useState<Record<string,File|undefined>>({});
+	const [receiptBusy,setReceiptBusy]=useState('');
 
 	const availableMethods=useMemo(()=>methods.filter(method=>type==='DEPOSIT'?method.depositEnabled:method.withdrawalEnabled),[methods,type]);
 	const selectedMethod=availableMethods.find(method=>method.id===methodId);
@@ -97,6 +99,27 @@ export default function WalletExperience(){
 		try{await navigator.clipboard.writeText(selectedMethod.destination);setCopied(true);window.setTimeout(()=>setCopied(false),1500)}catch{setError('Clipboard access is unavailable in this browser.')}
 	}
 
+	async function uploadReceipt(request:FundingRecord){
+		const file=receiptFiles[request.id];if(!file||receiptBusy)return;
+		setReceiptBusy(request.id);setError('');setMessage('');
+		try{
+			const body=new FormData();body.append('file',file);
+			const response=await fetch(`/api/wallet/${encodeURIComponent(request.id)}/receipt`,{method:'POST',body});
+			const result=await response.json();if(!response.ok)throw new Error(result.error||'Receipt upload failed.');
+			const delivery=result.emailDelivery==='sent'?'Support email sent.':result.emailDelivery==='failed'?'Support email failed; admin notification is recorded.':'Email is not configured; admin notification is recorded.';
+			setMessage(`Receipt stored privately. Funds were not credited. ${delivery}`);setReceiptFiles(current=>({...current,[request.id]:undefined}));await load();
+		}catch(exception){setError(exception instanceof Error?exception.message:'Receipt upload failed.')}
+		finally{setReceiptBusy('')}
+	}
+
+	async function openReceipt(requestId:string){
+		try{
+			const response=await fetch(`/api/wallet/${encodeURIComponent(requestId)}/receipt`,{cache:'no-store'});
+			const result=await response.json();if(!response.ok)throw new Error(result.error||'Receipt unavailable.');
+			window.open(result.url,'_blank','noopener,noreferrer');
+		}catch(exception){setError(exception instanceof Error?exception.message:'Receipt unavailable.')}
+	}
+
 	return <><Nav/><main className="account-page">
 		<header className="account-heading"><div><span className="account-kicker">{data.accountMode} ACCOUNT · Wallet &amp; funding</span><h1>Account funds</h1><p>{data.accountMode==='DEMO'?'Demo balances and funding activity are isolated from real accounts.':'Real-account funding stays pending until administrator review.'}</p></div><span className={`status-pill ${data.accountMode==='DEMO'?'mode-demo':'mode-real'}`}>{data.accountMode} ACCOUNT</span></header>
 		{data.accountMode==='REAL'&&!realKycApproved&&<div className="account-callout account-mode-notice"><span>Identity verification must be approved before real-account funding requests can be submitted.</span><Link className="text-link" href="/kyc">Open verification</Link></div>}
@@ -132,7 +155,7 @@ export default function WalletExperience(){
 				</form>
 			</section>
 			<section className="account-panel card p-5"><div className="account-panel-title"><div><h2>Transaction history</h2><p className="account-panel-subtitle">Mode-specific funding requests and review records.</p></div><div className="flex items-center gap-2"><Link className="text-link" href="/wallet/transactions">Full history</Link><button type="button" className="icon-action" aria-label="Refresh wallet history" onClick={()=>{setLoading(true);void load()}}><RefreshCw size={15}/></button></div></div>
-				{loading?<div className="account-empty" role="status">Loading transaction history…</div>:data.transactions.length?<div className="account-table-wrap"><table className="account-table"><thead><tr><th>Request</th><th>Amount</th><th>Status</th></tr></thead><tbody>{data.transactions.map(transaction=><tr key={transaction.id}><td><Link className="transaction-kind" href={`/wallet/transactions/${encodeURIComponent(transaction.id)}`}>{transaction.type==='DEPOSIT'?<ArrowDownLeft size={13}/>:<ArrowUpRight size={13}/>} {transaction.type}<small className="transaction-method">{transaction.method}</small><small className="transaction-method">{transaction.id}</small></Link></td><td>{money(Number(transaction.amount),transaction.currency)}</td><td><span className="status-pill">{statuses[transaction.status]||transaction.status}</span></td></tr>)}</tbody></table></div>:<div className="account-empty"><div><WalletCards size={22} className="mx-auto mb-3 gold"/><p>No funding requests yet.</p></div></div>}
+				{loading?<div className="account-empty" role="status">Loading transaction history…</div>:data.transactions.length?<div className="account-table-wrap"><table className="account-table"><thead><tr><th>Request</th><th>Amount</th><th>Status</th><th>Receipt</th></tr></thead><tbody>{data.transactions.map(transaction=><tr key={transaction.id}><td><Link className="transaction-kind" href={`/wallet/transactions/${encodeURIComponent(transaction.id)}`}>{transaction.type==='DEPOSIT'?<ArrowDownLeft size={13}/>:<ArrowUpRight size={13}/>} {transaction.type}<small className="transaction-method">{transaction.method}</small><small className="transaction-method">{transaction.id}</small></Link></td><td>{money(Number(transaction.amount),transaction.currency)}</td><td><span className="status-pill">{statuses[transaction.status]||transaction.status}</span></td><td>{transaction.type==='DEPOSIT'&&reserves.includes(transaction.status)?<div className="grid min-w-40 gap-1"><input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" aria-label={`Choose receipt for ${transaction.id}`} onChange={event=>setReceiptFiles(current=>({...current,[transaction.id]:event.target.files?.[0]}))}/><button type="button" className="btn min-h-11 bg-white/5" disabled={!receiptFiles[transaction.id]||receiptBusy===transaction.id} onClick={()=>void uploadReceipt(transaction)}>{receiptBusy===transaction.id?'Uploading…':'Upload receipt'}</button>{transaction.hasReceipt&&<button type="button" className="text-link" onClick={()=>void openReceipt(transaction.id)}>View private receipt</button>}</div>:transaction.hasReceipt?<button type="button" className="text-link" onClick={()=>void openReceipt(transaction.id)}>View private receipt</button>:<span className="muted">—</span>}</td></tr>)}</tbody></table></div>:<div className="account-empty"><div><WalletCards size={22} className="mx-auto mb-3 gold"/><p>No funding requests yet.</p></div></div>}
 			</section>
 		</div>
 	</main></>;

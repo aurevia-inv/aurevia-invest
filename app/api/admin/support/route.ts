@@ -15,7 +15,7 @@ export async function GET(){
 	try{
 		await requireAdmin();
 		const conversations=await db.supportConversation.findMany({include:{user:{select:{id:true,email:true,name:true}},transaction:{select:{id:true,type:true,accountMode:true,status:true,amount:true,currency:true}},messages:{orderBy:{createdAt:'desc'},take:5,select:{id:true,authorType:true,body:true,createdAt:true}}},orderBy:{lastMessageAt:'desc'},take:200});
-		return NextResponse.json(jsonSafe(conversations));
+		return NextResponse.json(jsonSafe(conversations.map(({attachmentKey,...conversation})=>({...conversation,hasAttachment:!!attachmentKey}))),{headers:{'Cache-Control':'private, no-store'}});
 	}catch{
 		return NextResponse.json({error:'Forbidden'},{status:403});
 	}

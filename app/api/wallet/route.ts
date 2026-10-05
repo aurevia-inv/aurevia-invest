@@ -6,6 +6,8 @@ import {db} from '@/lib/db';
 import {balance} from '@/lib/ledger';
 import {jsonSafe} from '@/lib/serializers';
 import {createNotification} from '@/lib/notifications';
+import {notifyActiveAdmins} from '@/lib/notifications';
+import {sendSupportEmail} from '@/lib/email';
 
 const schema=z.object({
 	type:z.nativeEnum(FundingType),
@@ -32,9 +34,13 @@ export async function GET(){
 		]);
 		const balances=await Promise.all(accounts.map(async account=>({currency:account.currency,balance:await balance(db,account.id)})));
 		const usdBalance=balances.find(item=>item.currency==='USD')?.balance??new Prisma.Decimal(0);
-		return NextResponse.json(jsonSafe({accountMode:user.accountMode,balance:usdBalance,balances,transactions}));
-	}catch{
-		return NextResponse.json({error:'Unauthorized'},{status:401});
+		const safeTransactions=transactions.map(({receiptKey,...transaction})=>({...transaction,hasReceipt:!!receiptKey}));
+		return NextResponse.json(jsonSafe({accountMode:user.accountMode,balance:usdBalance,balances,transactions:safeTransactions}),{headers:{'Cache-Control':'private, no-store'}});
+	}catch(error){
+		if(error instanceof Error&&error.message==='UNAUTHORIZED')return NextResponse.json({error:'Unauthorized'},{status:401});
+		const code=error&&typeof error==='object'&&'code' in error?String(error.code):'';
+		console.error(`Wallet data unavailable (${/^[A-Z0-9_]{2,32}$/.test(code)?code:error instanceof Error?error.name:'UnknownError'}).`);
+		return NextResponse.json({error:'Wallet data is temporarily unavailable.'},{status:503,headers:{'Cache-Control':'private, no-store'}});
 	}
 }
 
@@ -92,14 +98,23 @@ export async function POST(req:Request){
 			await tx.auditLog.create({data:{actorId:user.id,action:'FUNDING_SUBMITTED',entity:'FUNDING',entityId:request.id,metadata:{type:request.type,accountMode:request.accountMode,currency:request.currency,amount:request.amount.toString()}}});
 			const notificationType=request.type===FundingType.DEPOSIT?NotificationType.DEPOSIT:NotificationType.WITHDRAWAL;
 			await createNotification(tx,{userId:user.id,type:notificationType,title:`${request.type==='DEPOSIT'?'Deposit':'Withdrawal'} submitted`,message:`Your ${request.type.toLowerCase()} request is pending administrator review. No transfer has been confirmed.`,dedupeKey:`funding:${request.id}:submitted`,relatedEntity:'FUNDING',relatedId:request.id,actionUrl:`/wallet/transactions/${request.id}`});
+			await notifyActiveAdmins(tx,{type:notificationType,title:`New ${request.type.toLowerCase()} request`,message:`A ${request.accountMode.toLowerCase()} ${request.type.toLowerCase()} request is awaiting review. No payment is confirmed.`,dedupeKey:`funding:${request.id}:admin`,relatedEntity:'FUNDING',relatedId:request.id,actionUrl:'/admin'});
 			return {request,replay:false};
 		},{isolationLevel:Prisma.TransactionIsolationLevel.Serializable});
-		return NextResponse.json(jsonSafe(result.request),{status:result.replay?200:201});
+		let emailDelivery:'sent'|'not-configured'|'failed'='not-configured';
+		if(!result.replay){
+			const delivery=await sendSupportEmail(`New ${result.request.type.toLowerCase()} request`,[`Request: ${result.request.id}`,`User: ${user.id}`,`Account mode: ${result.request.accountMode}`,`Amount: ${result.request.amount.toString()} ${result.request.currency}`,`Status: ${result.request.status}`].join('\n'));
+			emailDelivery=delivery.sent?'sent':delivery.reason||'failed';
+		}
+		return NextResponse.json({...jsonSafe(result.request),emailDelivery},{status:result.replay?200:201});
 	}catch(error){
 		if(error instanceof ZodError)return NextResponse.json({error:'Check the funding details and try again.'},{status:400});
 		if(error instanceof Prisma.PrismaClientKnownRequestError&&error.code==='P2002')return NextResponse.json({error:'This submission was already received.'},{status:409});
 		const known=['IDEMPOTENCY_KEY_REUSED','PAYMENT_METHOD_UNAVAILABLE','AMOUNT_OUT_OF_RANGE','PAYMENT_INSTRUCTIONS_UNAVAILABLE','WITHDRAWAL_DESTINATION_REQUIRED','WITHDRAWAL_NETWORK_REQUIRED','INSUFFICIENT_AVAILABLE_BALANCE'];
 		if(error instanceof Error&&known.includes(error.message))return NextResponse.json({error:error.message.replaceAll('_',' ').toLowerCase()},{status:error.message==='IDEMPOTENCY_KEY_REUSED'?409:400});
+		const code=error&&typeof error==='object'&&'code' in error?String(error.code):'';
+		if(['P1001','P1002','P1017','P2021','P2022'].includes(code))return NextResponse.json({error:'Funding service is temporarily unavailable.'},{status:503});
+		console.error(`Funding request failed (${/^[A-Z0-9_]{2,32}$/.test(code)?code:error instanceof Error?error.name:'UnknownError'}).`);
 		return NextResponse.json({error:'Unable to submit this funding request.'},{status:500});
 	}
 }
